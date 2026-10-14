@@ -1,0 +1,8 @@
+# Context for rust/docker/analyzer.Dockerfile: only what the build reads.
+*
+!build.sh
+!go.mod
+!internal/binding/cpp
+internal/binding/cpp/cmake-build-*
+!rust
+rust/target
