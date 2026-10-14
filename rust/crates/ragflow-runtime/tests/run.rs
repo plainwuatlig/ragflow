@@ -126,15 +126,47 @@ fn a_router_runs_only_the_chosen_child_and_a_join_still_runs() {
 }
 
 #[test]
-fn a_route_missing_from_downstream_is_dropped() {
+fn a_child_outside_the_router_downstream_is_not_gated() {
+    // Agent:A lists the Switch as upstream but is not in its downstream, so
+    // the Switch's branch does not cover it (multibranch.go): it runs
+    // whatever the Switch picks.
     let b = bot(json!({ "components": {
         "begin": node("Begin", json!({}), &[], &["Switch:r"]),
-        "Switch:r": node("Switch", json!({ "route": "Agent:A" }), &["begin"], &[]),
-        "Agent:A": node("Agent", json!({ "say": "never" }), &["Switch:r"], &[]),
+        "Switch:r": node("Switch", json!({ "route": "Message:m" }), &["begin"], &["Message:m"]),
+        "Message:m": node("Message", json!({ "content": ["m"] }), &["Switch:r"], &[]),
+        "Agent:A": node("Agent", json!({ "say": "ungated" }), &["Switch:r"], &[]),
     }}));
     let mut events = Vec::new();
     b.run(input("q"), &mut events).unwrap();
-    assert_eq!(ran(&events), ["begin", "Switch:r"]);
+    assert_eq!(ran(&events), ["begin", "Switch:r", "Agent:A", "Message:m"]);
+}
+
+#[test]
+fn a_run_where_no_terminal_ran_fails_like_upstream() {
+    let canvas = |router: &str| {
+        json!({ "components": {
+            "begin": node("Begin", json!({}), &[], &[router]),
+            router: node("Switch", json!({ "route": [] }), &["begin"], &["Message:m"]),
+            "Message:m": node("Message", json!({ "content": ["m"] }), &[router], &[]),
+        }})
+    };
+    let mut events = Vec::new();
+    let err = bot(canvas("Switch:r"))
+        .run(input("q"), &mut events)
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "agent invoke: Switch routing stopped because no connected branch matched the condition; check the Switch branches"
+    );
+    assert_eq!(events.last().map(Event::name), Some("error"));
+    let mut events = Vec::new();
+    let err = bot(canvas("router"))
+        .run(input("q"), &mut events)
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "agent invoke: [GraphRunError] no tasks to execute, last completed nodes: [router]"
+    );
 }
 
 #[test]

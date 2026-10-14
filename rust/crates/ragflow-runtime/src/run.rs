@@ -3,8 +3,10 @@
 //! Scheduling follows upstream's eino workflow as far as it is observable:
 //! a node runs once every upstream has finished or been skipped, and is
 //! itself skipped when no upstream reached it. A Switch or Categorize
-//! reaches only the children it names in `_next` that are also in its own
-//! `downstream`; any other route is dropped. A node's inputs are its data
+//! gates the children in its own `downstream`: of those, only the ones it
+//! names in `_next` run (any other route is dropped); a child that is not
+//! in its `downstream` is not gated. A run where no terminal component ran
+//! fails, as upstream's workflow does when it runs out of tasks before END. A node's inputs are its data
 //! upstream's outputs (see `Node::data_upstream`). Any component error ends
 //! the run.
 //!
@@ -227,6 +229,11 @@ pub enum RunError {
     Component { id: String, message: String },
     #[error("turn budget exhausted before component {next:?}")]
     Deadline { next: String },
+    /// No terminal component ran: upstream's workflow runs out of tasks
+    /// before END (eino `no tasks to execute`), and the service rewrites
+    /// the error for a Switch (`canvasInvokeError`, service/agent.go).
+    #[error("{message}")]
+    NoTerminal { last: String, message: String },
 }
 
 pub struct RunInput {
@@ -306,6 +313,8 @@ impl Bot {
         // SuppressAgentMessageEvents); it decides whether the answer is
         // re-emitted at the end.
         let mut suppressed = false;
+        // The last scheduled component to finish (eino's "last completed").
+        let mut last_finished = String::new();
         let mut status: BTreeMap<&str, Status> = BTreeMap::new();
         let mut raw: BTreeMap<&str, Outputs> = BTreeMap::new();
         for id in &graph.order {
@@ -390,6 +399,9 @@ impl Bot {
                         id: id.clone(),
                         message,
                     };
+                    // The service completes leftover deferred Agents before
+                    // it reports the error.
+                    deferred.flush(&mut events);
                     events.emit(Event::Error {
                         message: err.to_string(),
                     });
@@ -412,10 +424,31 @@ impl Bot {
             });
             raw.insert(id, outputs);
             status.insert(id, Status::Done);
+            last_finished = id.clone();
         }
 
         let answer = terminal_answer(graph, &state);
         deferred.flush(&mut events);
+        let terminal_ran = graph
+            .nodes
+            .values()
+            .any(|n| n.downstream.is_empty() && status.get(n.id.as_str()) == Some(&Status::Done));
+        if !terminal_ran {
+            let message = if last_finished.starts_with("Switch:") {
+                "agent invoke: Switch routing stopped because no connected branch matched the condition; check the Switch branches".to_string()
+            } else {
+                format!(
+                    "agent invoke: [GraphRunError] no tasks to execute, last completed nodes: [{last_finished}]"
+                )
+            };
+            events.emit(Event::Error {
+                message: message.clone(),
+            });
+            return Err(RunError::NoTerminal {
+                last: last_finished,
+                message,
+            });
+        }
         // service/agent.go: the answer is emitted after the fact only when
         // nothing was shown live and no eager Agent suppressed it.
         let emitted = events.messages > 0;
@@ -505,7 +538,10 @@ fn routes_to(parent: &Node, outputs: &Outputs, child: &str) -> bool {
         Some(Value::Array(many)) => many.iter().any(|v| v.as_str() == Some(child)),
         _ => false,
     };
-    chosen && parent.downstream.iter().any(|d| d == child)
+    // Only children in the router's `downstream` sit behind its branch
+    // (multibranch.go); a child that lists the router as upstream without
+    // being in its `downstream` has a plain edge and always runs.
+    chosen || !parent.downstream.iter().any(|d| d == child)
 }
 
 fn sanitized(outputs: &Outputs) -> Outputs {
