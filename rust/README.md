@@ -93,9 +93,45 @@ Run failures are worded as upstream words them (`agent invoke: [NodeRunError] ag
 (connection refused, timeouts) carry the Rust HTTP stack's description after upstream's `failed to send request: Post "<url>":`.
 
     cd rust && cargo test                                   # unit and in-memory tests
-    docker build -f rust/docker/server.Dockerfile --build-context upstream=/tmp/upstream -t ragflow-server .
+    rust/docker/build-server.sh /path/to/upstream-checkout <upstream-commit>
 
-Configuration is the environment RAGFlow's deployment already defines (`MYSQL_*`, `KVROCKS_*`, `REDIS_PASSWORD`,
-`ES_*`, `ELASTIC_PASSWORD`; see `crates/ragflow-server/src/main.rs`). `server-e2e/` runs the Go server and ragflow-server
-against one throwaway copy of a deployment and diffs them.
+### Environment contract
 
+The names are the ones RAGFlow's own `docker/.env` and compose files already define, so the same env file can feed both
+servers. "Required" means the server cannot work against a real deployment without it; the defaults are the names
+RAGFlow's compose network gives its services.
+
+| variable | default | required | meaning |
+|---|---|---|---|
+| `MYSQL_HOST`, `MYSQL_PORT` | `mysql`, `3306` | no | RAGFlow's MySQL |
+| `MYSQL_USER`, `MYSQL_DBNAME` | `root`, `rag_flow` | no | |
+| `MYSQL_PASSWORD` | empty | yes | |
+| `KVROCKS_HOST`, `KVROCKS_PORT` | `kvrocks`, `6379` | no | RAGFlow's Kvrocks (Redis protocol): run leases, cancel flags, the session secret |
+| `KVROCKS_DB` | `1` | no | the database number RAGFlow uses |
+| `REDIS_PASSWORD` | empty | yes if Kvrocks has a password | |
+| `ES_URL` | `http://${ES_HOST}:9200` | no | Elasticsearch base URL; wins over `ES_HOST` |
+| `ES_HOST` | `es01` | no | used only when `ES_URL` is unset |
+| `ES_USER` | `elastic` | no | |
+| `ELASTIC_PASSWORD` | unset (no auth) | yes if Elasticsearch has security on | |
+| `RAGFLOW_SECRET_KEY` | unset | no | the itsdangerous session-token secret; when unset it is read from Kvrocks (never created) |
+| `RAGFLOW_MODELS_DIR` | `conf/models` (`/ragflow/conf/models` in the image) | no | upstream's provider catalog |
+| `RAGFLOW_DICT_PATH` | `/usr/share/infinity/resource` | no | the analyzer's dictionaries (in the image) |
+| `RAGFLOW_RES_DIR` | unset | no | the analyzer's resource directory, when it is not under the dictionary path |
+| `RAGFLOW_LISTEN` | `0.0.0.0:9380` | no | bind address; the container's `HEALTHCHECK` probes this port |
+
+Secrets belong in an env file or the orchestrator's secret store, never in the image. The server writes to the MySQL it
+is given (sessions, logs); give it the deployment's database only on purpose, and it reads Elasticsearch only.
+
+### Image, health, shutdown
+
+`rust/docker/build-server.sh <upstream-repo> <upstream-commit> [image]` builds the image (see `server.Dockerfile`) and
+tags it with this checkout's short commit, so a tag names one source tree. The image runs as `nobody`, listens on 9380,
+and carries `org.opencontainers.image.revision` and `ragflow.upstream.commit` labels.
+
+* `GET /healthz` answers `200 {"status":"ok"}` with no credentials and touches no store (liveness only: a store outage
+  fails requests, not the container). `ragflow-server healthcheck` is the same probe for `HEALTHCHECK`.
+* SIGTERM or Ctrl-C stops accepting and drains in-flight requests.
+
+Deploying beside a RAGFlow, splitting traffic and rolling back: [DEPLOY.md](DEPLOY.md).
+
+`server-e2e/` runs the Go server and ragflow-server against one throwaway copy of a deployment and diffs them.
