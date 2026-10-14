@@ -70,6 +70,10 @@ fn run(fake: Arc<Fake>, dsl: Value, query: &str) -> Vec<String> {
             .with_ymd_and_hms(2026, 10, 13, 16, 21, 0)
             .unwrap(),
         deadline: None,
+        ids: Default::default(),
+        user_input: None,
+        cancel: None,
+        finish: None,
     };
     bot.run(input, &mut events).unwrap();
     events

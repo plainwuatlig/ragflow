@@ -14,6 +14,12 @@ pub struct Dsl {
     pub components: BTreeMap<String, Component>,
     #[serde(default)]
     pub globals: BTreeMap<String, Value>,
+    /// The conversation a session DSL carries: `[[role, payload], ...]`.
+    #[serde(default)]
+    pub history: Value,
+    /// Tool-call memory: `[[user, assistant, summary], ...]`.
+    #[serde(default)]
+    pub memory: Value,
 }
 
 #[derive(Debug, Deserialize)]

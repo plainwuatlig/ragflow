@@ -21,6 +21,8 @@
 //! `message_end`, with no `error` and no `workflow_finished`.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, FixedOffset};
@@ -238,6 +240,12 @@ pub enum BuildError {
 pub enum RunError {
     #[error("canvas: component {id:?} invoke: {message}")]
     Component { id: String, message: String },
+    /// The run's cancel flag was raised; no event is emitted for it.
+    #[error("context canceled")]
+    Cancelled,
+    /// The finish hook (the service's persistence) failed.
+    #[error("{0}")]
+    Persist(String),
     #[error("turn budget exhausted before component {next:?}")]
     Deadline { next: String },
     /// No terminal component ran: upstream's workflow runs out of tasks
@@ -247,10 +255,62 @@ pub enum RunError {
     NoTerminal { last: String, message: String },
 }
 
+/// The identities the service puts into `sys.*` before a run
+/// (`sys.user_id`, `sys.canvas_id`, `sys.session_id`, `sys.tenant_id`).
+#[derive(Debug, Default, Clone)]
+pub struct SysIds {
+    pub user_id: String,
+    pub canvas_id: String,
+    pub session_id: String,
+    pub tenant_id: String,
+}
+
+/// What the service sees when the components are done and the closing events
+/// are still unsent (upstream persists the turn at this point).
+pub struct Finish<'a> {
+    /// The terminal component's outputs (`{}` when none).
+    pub answer: &'a Outputs,
+    /// The run's state; the hook records the assistant turn in its history.
+    pub state: &'a mut RunState,
+    /// `agentRunReferencePayload`: the citation payload, when there is one.
+    pub reference: Option<Value>,
+    /// The reply as the client reads it: the answer, or a failed deferred
+    /// Agent's error text when that is what is shown.
+    pub visible_answer: String,
+    /// Set when a deferred Agent failed and its text became the reply.
+    pub deferred_failure: Option<&'a str>,
+}
+
+pub type FinishHook = Box<dyn FnOnce(Finish<'_>) -> Result<(), String> + Send>;
+
 pub struct RunInput {
     pub query: String,
     pub now: DateTime<FixedOffset>,
     pub deadline: Option<Instant>,
+    pub ids: SysIds,
+    /// A form-style user input (`{"query": ..., <field>: ...}`): it replaces
+    /// the `{"query": <query>}` workflow input, and its `query` becomes
+    /// `sys.query`.
+    pub user_input: Option<Map<String, Value>>,
+    /// Raised by whoever cancels the run; checked between components.
+    pub cancel: Option<Arc<AtomicBool>>,
+    /// Runs once before the closing events (`message_end`,
+    /// `workflow_finished`) are emitted.
+    pub finish: Option<FinishHook>,
+}
+
+impl RunInput {
+    pub fn new(query: &str, now: DateTime<FixedOffset>) -> Self {
+        RunInput {
+            query: query.to_string(),
+            now,
+            deadline: None,
+            ids: SysIds::default(),
+            user_input: None,
+            cancel: None,
+            finish: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -300,18 +360,85 @@ impl Bot {
         &self.plan.graph
     }
 
-    pub fn run(&self, input: RunInput, events: &mut dyn EventSink) -> Result<RunOutcome, RunError> {
+    /// `agentRunReferencePayload`: the run's citations, without the document
+    /// aggregates when an Agent ran without `cite` (upstream drops them).
+    fn reference(&self, state: &RunState) -> Option<Value> {
+        let mut reference = crate::components::retrieval::retrieval_reference(state)?;
+        let agent_ran =
+            self.plan.graph.nodes.values().any(|n| {
+                n.name == "Agent" && state.outputs.get(&n.id).is_some_and(|o| !o.is_empty())
+            });
+        let cite = self.plan.graph.nodes.values().any(|n| {
+            n.name == "Agent"
+                && state.outputs.get(&n.id).is_some_and(|o| !o.is_empty())
+                && n.params.get("cite").and_then(Value::as_bool) == Some(true)
+        });
+        if agent_ran && !cite {
+            if let Some(map) = reference.as_object_mut() {
+                map.remove("doc_aggs");
+            }
+        }
+        Some(reference)
+    }
+
+    pub fn run(
+        &self,
+        mut input: RunInput,
+        events: &mut dyn EventSink,
+    ) -> Result<RunOutcome, RunError> {
         let started = Instant::now();
+        let finish = input.finish.take();
         let graph = &self.plan.graph;
         let mut events = Tracking {
             inner: events,
             messages: 0,
         };
+        let cancelled = || {
+            input
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::SeqCst))
+        };
         let mut state = RunState::seed(&self.plan.dsl.globals, &input.query, input.now);
-        let mut start_input = Map::new();
-        start_input.insert("query".into(), Value::String(input.query.clone()));
+        // service/agent.go buildRunFunc: the conversation comes from the
+        // session DSL, the current turn is appended to it, and the service
+        // identities land in sys.*.
+        state.set_conversation(&self.plan.dsl.history, &self.plan.dsl.memory);
+        let (user_input, query_value, mut start_input) = match &input.user_input {
+            Some(form) => (
+                Value::Object(form.clone()),
+                form.get("query").cloned().unwrap_or(Value::Null),
+                form.clone(),
+            ),
+            None => {
+                let mut start = Map::new();
+                start.insert("query".into(), Value::String(input.query.clone()));
+                (
+                    Value::String(input.query.clone()),
+                    Value::String(input.query.clone()),
+                    start,
+                )
+            }
+        };
+        state.sys.insert("query".into(), query_value.clone());
+        state.append_current_user(query_value.clone());
+        state.append_sys_history(format!(
+            "user: {}",
+            crate::state::render_user_history_value(&query_value)
+        ));
+        for (key, value) in [
+            ("user_id", &input.ids.user_id),
+            ("canvas_id", &input.ids.canvas_id),
+            ("session_id", &input.ids.session_id),
+            ("tenant_id", &input.ids.tenant_id),
+        ] {
+            if !value.is_empty() {
+                state.sys.insert(key.into(), Value::String(value.clone()));
+            }
+        }
+        let _ = &mut start_input;
         events.emit(Event::WorkflowStarted {
-            inputs: Value::String(input.query.clone()),
+            inputs: user_input.clone(),
         });
 
         let mut deferred = DeferredAgents {
@@ -338,6 +465,9 @@ impl Bot {
             if !reached {
                 status.insert(id, Status::Skipped);
                 continue;
+            }
+            if cancelled() {
+                return Err(RunError::Cancelled);
             }
             if let Some(deadline) = input.deadline {
                 if Instant::now() >= deadline {
@@ -386,19 +516,33 @@ impl Bot {
             };
             let outputs = match result {
                 Ok(outputs) => outputs,
+                Err(_) if cancelled() => return Err(RunError::Cancelled),
                 Err(message) => {
                     if let Some(failure) = deferred.failure.take() {
                         let answer = terminal_answer(graph, &state);
                         deferred.flush(&mut events);
                         let emitted = events.messages > 0;
                         let shown = emitted || !suppressed;
-                        if answer_text(&answer).is_empty() && !emitted && shown {
+                        let mut visible = answer_text(&answer);
+                        if visible.is_empty() && !emitted && shown {
+                            visible = failure.trim().to_string();
                             events.emit(Event::Message {
-                                content: failure.trim().to_string(),
+                                content: visible.clone(),
                             });
                         }
+                        let reference = self.reference(&state);
+                        if let Some(hook) = finish {
+                            hook(Finish {
+                                answer: &answer,
+                                state: &mut state,
+                                reference: reference.clone(),
+                                visible_answer: visible,
+                                deferred_failure: Some(failure.as_str()),
+                            })
+                            .map_err(RunError::Persist)?;
+                        }
                         if shown {
-                            events.emit(Event::MessageEnd);
+                            events.emit(Event::MessageEnd { reference });
                         }
                         return Ok(RunOutcome {
                             answer,
@@ -460,6 +604,17 @@ impl Bot {
                 message,
             });
         }
+        let reference = self.reference(&state);
+        if let Some(hook) = finish {
+            hook(Finish {
+                answer: &answer,
+                state: &mut state,
+                reference: reference.clone(),
+                visible_answer: answer_text(&answer),
+                deferred_failure: None,
+            })
+            .map_err(RunError::Persist)?;
+        }
         // service/agent.go: the answer is emitted after the fact only when
         // nothing was shown live and no eager Agent suppressed it.
         let emitted = events.messages > 0;
@@ -469,10 +624,10 @@ impl Bot {
             });
         }
         if emitted || !suppressed {
-            events.emit(Event::MessageEnd);
+            events.emit(Event::MessageEnd { reference });
         }
         events.emit(Event::WorkflowFinished {
-            query: Value::String(input.query),
+            query: user_input,
             outputs: workflow_outputs(&answer),
             elapsed_time: started.elapsed().as_secs_f64(),
             created_at: unix_now(),

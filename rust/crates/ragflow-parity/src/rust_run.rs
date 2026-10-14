@@ -140,6 +140,10 @@ pub fn run(dsl: &str, query: &str, recordings: &Map<String, Value>) -> Outcome {
                         query: query.to_string(),
                         now,
                         deadline: None,
+                        ids: Default::default(),
+                        user_input: None,
+                        cancel: None,
+                        finish: None,
                     };
                     // A run error is already in the stream as an `error` event.
                     let _ = bot.run(input, &mut Sink(shared.clone()));
