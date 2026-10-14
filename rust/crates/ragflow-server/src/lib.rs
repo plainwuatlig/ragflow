@@ -2,4 +2,7 @@
 
 pub mod auth;
 pub mod dslops;
+pub mod facts;
 pub mod gojson;
+pub mod perm;
+pub mod store;
