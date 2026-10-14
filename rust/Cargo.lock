@@ -222,6 +222,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ragflow-analyzer"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "ragflow-parity"
 version = "0.0.0"
 dependencies = [

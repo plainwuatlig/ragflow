@@ -1,0 +1,17 @@
+[package]
+name = "ragflow-analyzer"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "FFI bindings to RAGFlow's C++ text analyzer (internal/binding/cpp)"
+links = "rag_tokenizer_c_api"
+build = "build.rs"
+
+[dependencies]
+serde_json.workspace = true
+
+[[bin]]
+name = "ragflow-analyzer"
+path = "src/main.rs"
