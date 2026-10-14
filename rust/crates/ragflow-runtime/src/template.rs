@@ -172,6 +172,18 @@ pub fn references(template: &str) -> Vec<String> {
         .collect()
 }
 
+/// Every reference with its byte span (the whole braced match) and its
+/// name, in order of appearance.
+pub fn reference_spans(template: &str) -> Vec<(usize, usize, String)> {
+    pattern()
+        .captures_iter(template)
+        .map(|caps| {
+            let all = caps.get(0).expect("match");
+            (all.start(), all.end(), caps[1].to_string())
+        })
+        .collect()
+}
+
 /// A whole-string reference such as `{Retrieval:a@formalized_content}`,
 /// returned without braces.
 pub fn sole_reference(template: &str) -> Option<String> {

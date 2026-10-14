@@ -1,0 +1,83 @@
+{
+  "globals": {
+    "sys.query": ""
+  },
+  "components": {
+    "begin": {
+      "obj": {
+        "component_name": "Begin",
+        "params": {
+          "inputs": {
+            "sys_prompt": {
+              "type": "line",
+              "name": "sys_prompt"
+            }
+          }
+        }
+      },
+      "upstream": [],
+      "downstream": [
+        "Categorize:C"
+      ]
+    },
+    "Categorize:C": {
+      "obj": {
+        "component_name": "Categorize",
+        "params": {
+          "llm_id": "parity-chat@OpenAI",
+          "items": [
+            {
+              "name": "Billing",
+              "description": "money",
+              "to": [
+                "Message:B"
+              ]
+            },
+            {
+              "name": "Tech",
+              "description": "bugs",
+              "to": [
+                "Message:T"
+              ]
+            }
+          ]
+        }
+      },
+      "upstream": [
+        "begin"
+      ],
+      "downstream": [
+        "Message:B",
+        "Message:T"
+      ]
+    },
+    "Message:B": {
+      "obj": {
+        "component_name": "Message",
+        "params": {
+          "content": [
+            "billing"
+          ]
+        }
+      },
+      "upstream": [
+        "Categorize:C"
+      ],
+      "downstream": []
+    },
+    "Message:T": {
+      "obj": {
+        "component_name": "Message",
+        "params": {
+          "content": [
+            "tech"
+          ]
+        }
+      },
+      "upstream": [
+        "Categorize:C"
+      ],
+      "downstream": []
+    }
+  }
+}

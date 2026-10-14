@@ -3,9 +3,9 @@
 //! `oracle-go` prints (`{"event": <name>, "data": <payload>}`), including
 //! an `llm_call` line per chat request.
 //!
-//! The runtime's `Models::chat` does not say which component calls it, so
-//! the sink remembers the component of the last `node_started`; the
-//! runtime runs one node at a time, so that is the caller.
+//! Agent and Categorize call `Models::chat_for` with their component id
+//! (a deferred Agent calls while its Message runs, so the event stream
+//! cannot tell); plain `chat` falls back to the last `node_started`.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -35,8 +35,24 @@ impl Models for Recorded {
         messages: &[ChatMessage],
         options: &ChatOptions,
     ) -> Result<String, String> {
+        let cpn = self
+            .shared
+            .lock()
+            .expect("parity state lock")
+            .current
+            .clone();
+        self.chat_for(&cpn, model, messages, options)
+    }
+
+    fn chat_for(
+        &self,
+        cpn: &str,
+        model: &ModelRef,
+        messages: &[ChatMessage],
+        options: &ChatOptions,
+    ) -> Result<String, String> {
         let mut shared = self.shared.lock().expect("parity state lock");
-        let cpn = shared.current.clone();
+        let cpn = cpn.to_string();
         let n = *shared.calls.get(&cpn).unwrap_or(&0);
         shared.calls.insert(cpn.clone(), n + 1);
         let key = format!("{cpn}#{n}");

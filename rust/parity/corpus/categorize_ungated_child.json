@@ -1,0 +1,7 @@
+{
+  "canvas": "canvases/categorize_ungated_child.json",
+  "query": "hi",
+  "recordings": {
+    "Categorize:C#0": "A"
+  }
+}

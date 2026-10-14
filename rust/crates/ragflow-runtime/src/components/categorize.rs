@@ -1,8 +1,8 @@
 //! Categorize: one LLM call picks a category; the run goes to that
 //! category's route.
 //!
-//! Prompt text, parsing and matching follow upstream's `categorize.go` at
-//! v1.0.0-rc1 byte for byte where it matters: categories sorted in the
+//! Prompt text, parsing and matching follow upstream's `categorize.go`
+//! (main) byte for byte where it matters: categories sorted in the
 //! prompt, examples quoted Go-style (`%q`), the answer matched exactly,
 //! then case-insensitively, else the default category (no substring
 //! matching). Routes come from `items[].to[0]` (else `uuid`) and are
@@ -17,10 +17,14 @@ use crate::graph::Node;
 use crate::models::{ChatMessage, ChatOptions, ModelRef, Models};
 use crate::run::{Component, NodeCtx};
 use crate::state::Outputs;
+use crate::template::go_v;
 
 pub struct Categorize {
+    id: String,
     models: Arc<dyn Models>,
-    model: ModelRef,
+    /// Raw model id; empty fails the run when the node runs, as upstream
+    /// does. The data upstream's `model_id` / `llm_id` replaces it.
+    model_id: String,
     /// DSL order; the default category is the first.
     categories: Vec<String>,
     descriptions: BTreeMap<String, String>,
@@ -33,9 +37,11 @@ pub struct Categorize {
 
 pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component>, String> {
     let p = node.params.as_object().cloned().unwrap_or_default();
-    let model_id = text(&p, "model_id")
-        .or_else(|| text(&p, "llm_id"))
-        .ok_or("model_id: required")?;
+    // upstream's stringFrom: a present string counts, even empty.
+    let model_id = string_from(&p, "model_id")
+        .or_else(|| string_from(&p, "llm_id"))
+        .unwrap_or_default()
+        .to_string();
     let mut categories = Vec::new();
     let mut descriptions = BTreeMap::new();
     let mut examples: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -116,19 +122,23 @@ pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component
     if categories.is_empty() {
         return Err("categories: at least one category is required".into());
     }
-    let default_category = text(&p, "default_category").unwrap_or_else(|| categories[0].clone());
+    let default_category = string_from(&p, "default_category")
+        .unwrap_or_default()
+        .to_string();
     Ok(Box::new(Categorize {
+        id: node.id.clone(),
         models,
-        model: ModelRef::parse(&model_id)?,
+        model_id,
         categories,
         descriptions,
         examples,
         routes,
-        sys_prompt: text(&p, "sys_prompt")
-            .or_else(|| text(&p, "system_prompt"))
-            .unwrap_or_default(),
+        sys_prompt: string_from(&p, "sys_prompt")
+            .or_else(|| string_from(&p, "system_prompt"))
+            .unwrap_or_default()
+            .to_string(),
         default_category,
-        query_ref: text(&p, "query").unwrap_or_else(|| "sys.query".into()),
+        query_ref: string_from(&p, "query").unwrap_or_default().to_string(),
     }))
 }
 
@@ -137,6 +147,10 @@ fn text(map: &Map<String, Value>, key: &str) -> Option<String> {
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+fn string_from<'m>(map: &'m Map<String, Value>, key: &str) -> Option<&'m str> {
+    map.get(key).and_then(Value::as_str)
 }
 
 fn first_route(value: Option<&Value>) -> Option<String> {
@@ -152,9 +166,14 @@ fn first_route(value: Option<&Value>) -> Option<String> {
 }
 
 impl Categorize {
+    /// The generated prompt, or `sys_prompt` verbatim when set.
     pub fn system_prompt(&self) -> String {
-        if !self.sys_prompt.is_empty() {
-            return self.sys_prompt.clone();
+        self.system_prompt_with(&self.sys_prompt)
+    }
+
+    fn system_prompt_with(&self, sys_prompt: &str) -> String {
+        if !sys_prompt.is_empty() {
+            return sys_prompt.to_string();
         }
         let mut cats = self.categories.clone();
         cats.sort();
@@ -210,7 +229,7 @@ impl Categorize {
         format!("\n---- Real Data ----\nUSER: {} ->\n", go_quote(&content))
     }
 
-    fn pick(&self, response: &str) -> String {
+    fn pick(&self, response: &str, default_category: &str) -> String {
         let r = response.trim().trim_matches(|c| "\"'`\n\r\t ".contains(c));
         let r = r.strip_prefix("category:").unwrap_or(r);
         let r = r.strip_prefix("Category:").unwrap_or(r).trim();
@@ -222,25 +241,61 @@ impl Categorize {
             .iter()
             .find(|c| c.to_lowercase() == lower)
             .cloned()
-            .unwrap_or_else(|| self.default_category.clone())
+            .unwrap_or_else(|| default_category.to_string())
     }
 }
 
 impl Component for Categorize {
     fn invoke(&self, ctx: &mut NodeCtx<'_>) -> Result<Outputs, String> {
-        let query = match ctx.inputs.get("query") {
-            Some(Value::String(s)) => s.clone(),
-            Some(Value::Null) | None => ctx
-                .state
-                .lookup(&self.query_ref)
-                .map(|v| crate::template::to_text(&v))
-                .unwrap_or_default(),
-            Some(other) => other.to_string(),
+        // mergeCategorizeParam: the data upstream's outputs override the
+        // string params this runtime acts on.
+        let inputs = ctx.inputs;
+        let model_id = string_from(inputs, "model_id")
+            .or_else(|| string_from(inputs, "llm_id"))
+            .unwrap_or(&self.model_id);
+        let query_ref = string_from(inputs, "query").unwrap_or(&self.query_ref);
+        let sys_prompt = string_from(inputs, "sys_prompt")
+            .or_else(|| string_from(inputs, "system_prompt"))
+            .unwrap_or(&self.sys_prompt);
+        let default_category =
+            match string_from(inputs, "default_category").unwrap_or(&self.default_category) {
+                "" => self.categories[0].as_str(),
+                d => d,
+            };
+        if model_id.is_empty() {
+            return Err(r#"component: invalid param "model_id": required"#.into());
+        }
+        let model = ModelRef::parse(model_id)?;
+        // resolveCategorizeQuery: the upstream's `query`, else the upstream
+        // value under the query reference, else the reference itself.
+        let query_ref = match query_ref.trim() {
+            "" => "sys.query",
+            r => r,
+        };
+        let any_text = |v: &Value| match v {
+            Value::String(s) => s.clone(),
+            other => go_v(other),
+        };
+        let query = match inputs.get("query").filter(|v| !v.is_null()) {
+            Some(v) => any_text(v),
+            None => match inputs
+                .get(query_ref)
+                .filter(|v| !v.is_null())
+                .map(any_text)
+                .filter(|v| !v.trim().is_empty())
+            {
+                Some(v) => v,
+                None => ctx
+                    .state
+                    .lookup(query_ref)
+                    .map(|v| any_text(&v))
+                    .unwrap_or_default(),
+            },
         };
         let messages = [
             ChatMessage {
                 role: "system",
-                content: self.system_prompt(),
+                content: self.system_prompt_with(sys_prompt),
             },
             ChatMessage {
                 role: "user",
@@ -249,9 +304,9 @@ impl Component for Categorize {
         ];
         let answer = self
             .models
-            .chat(&self.model, &messages, &ChatOptions::default())
+            .chat_for(&self.id, &model, &messages, &ChatOptions::default())
             .map_err(|e| format!("component: Categorize.Invoke: {e}"))?;
-        let chosen = self.pick(&answer);
+        let chosen = self.pick(&answer, default_category);
         let scores: Map<String, Value> = self
             .categories
             .iter()

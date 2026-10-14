@@ -1,7 +1,7 @@
 //! Switch: routes to the `to` targets of the first condition group that
 //! matches, else to `default` (or the first `end_cpn_ids` entry).
 //!
-//! Semantics follow upstream's `switch.go` at v1.0.0-rc1: groups are
+//! Semantics follow upstream's `switch.go` (main): groups are
 //! `{op, clauses[{left, op, right}]}` or the legacy
 //! `{logical_operator, items[{cpn_id, operator, value}]}`; an empty group
 //! never matches; string comparisons ignore case; `>`/`<`/`>=`/`<=` on a

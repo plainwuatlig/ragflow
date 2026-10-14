@@ -1,0 +1,7 @@
+{
+  "canvas": "canvases/param_override_agent.json",
+  "query": "Translate 'merci' to English",
+  "recordings": {
+    "Agent:A#0": "thank you"
+  }
+}

@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! ragflow-parity run    --canvas dsl.json --query Q --recordings rec.json
-//! ragflow-parity diff   go.jsonl rust.jsonl
+//! ragflow-parity diff   go.jsonl rust.jsonl [--canvas dsl.json]
 //! ragflow-parity corpus <dir> --oracle <oracle-go> --conf <conf/models> [--out <dir>] [--only <substr>]
 //! ```
 //!
@@ -102,9 +102,15 @@ fn cmd_diff(args: &[String]) -> Result<ExitCode, String> {
     let [go, rust] = a.positional.as_slice() else {
         return Err("diff takes two files: go.jsonl rust.jsonl".into());
     };
+    // With --canvas, independent components may finish in any order.
+    let topo = match a.get("canvas") {
+        Some(path) => Some(compare::topology(&case::read_json(Path::new(path))?)),
+        None => None,
+    };
     let report = compare::compare(
         &compare::parse(&read_lines(go)?),
         &compare::parse(&read_lines(rust)?),
+        topo.as_ref(),
     );
     print_report("diff", &report);
     Ok(if report.passed() {
@@ -120,6 +126,9 @@ fn print_report(name: &str, report: &compare::Report) {
     }
     for (check, detail) in &report.soft {
         println!("--- {name}: soft {check}\n{}", detail.trim_end());
+    }
+    for (check, detail) in &report.known {
+        println!("--- {name}: KNOWN {check}\n{}", detail.trim_end());
     }
 }
 
@@ -167,14 +176,20 @@ fn cmd_corpus(args: &[String]) -> Result<ExitCode, String> {
     for r in rows.iter().filter(|r| !r.detail.is_empty()) {
         println!("\n=== {} ({})\n{}", r.name, r.verdict, r.detail.trim_end());
     }
-    let failed = rows
+    let known = rows
         .iter()
-        .filter(|r| !r.verdict.starts_with("PASS"))
+        .filter(|r| r.verdict.starts_with("KNOWN"))
         .count();
+    let passed = rows
+        .iter()
+        .filter(|r| r.verdict.starts_with("PASS"))
+        .count();
+    let failed = rows.len() - passed - known;
     println!(
-        "\n{} cases, {} pass, {} fail; artifacts in {}",
+        "\n{} cases, {} pass, {} known, {} fail; artifacts in {}",
         rows.len(),
-        rows.len() - failed,
+        passed,
+        known,
         failed,
         out_root.display()
     );
@@ -258,7 +273,11 @@ fn run_case(path: &Path, oracle: &str, conf: &str, out_root: &Path) -> Result<Ro
         });
     }
 
-    let report = compare::compare(&compare::parse(&go_lines), &compare::parse(&rust.lines));
+    let report = compare::compare(
+        &compare::parse(&go_lines),
+        &compare::parse(&rust.lines),
+        Some(&compare::topology(&case.dsl)),
+    );
     let mut text = String::new();
     for (check, d) in &report.hard {
         text.push_str(&format!("[FAIL {check}]\n{}\n", d.trim_end()));
@@ -266,16 +285,24 @@ fn run_case(path: &Path, oracle: &str, conf: &str, out_root: &Path) -> Result<Ro
     for (check, d) in &report.soft {
         text.push_str(&format!("[soft {check}]\n{}\n", d.trim_end()));
     }
-    let verdict = if report.passed() {
-        if report.soft.is_empty() {
-            "PASS".to_string()
-        } else {
-            let soft: Vec<&str> = report.soft.iter().map(|(c, _)| *c).collect();
-            format!("PASS (soft: {})", soft.join(", "))
-        }
+    for (check, d) in &report.known {
+        text.push_str(&format!("[KNOWN {check}]\n{}\n", d.trim_end()));
+    }
+    let soft: Vec<&str> = report.soft.iter().map(|(c, _)| *c).collect();
+    let soft = if soft.is_empty() {
+        String::new()
     } else {
+        format!(" (soft: {})", soft.join(", "))
+    };
+    let verdict = if !report.passed() {
         let hard: Vec<&str> = report.hard.iter().map(|(c, _)| *c).collect();
         format!("FAIL ({})", hard.join(", "))
+    } else if !report.known.is_empty() {
+        let mut known: Vec<&str> = report.known.iter().map(|(c, _)| *c).collect();
+        known.dedup();
+        format!("KNOWN ({}){soft}", known.join(", "))
+    } else {
+        format!("PASS{soft}")
     };
     Ok(Row {
         name: case.name,

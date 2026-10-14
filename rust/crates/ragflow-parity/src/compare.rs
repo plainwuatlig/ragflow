@@ -5,12 +5,21 @@
 //! Go's node wrapper stamps into every output bucket are dropped; numbers
 //! compare as f64 (`1` == `1.0`).
 //!
-//! Hard checks (any mismatch fails the case): the order of `node_finished`
-//! component ids, each component's outputs, every LLM call (model,
+//! Hard checks (any mismatch fails the case): the `node_finished` component
+//! ids and the order the canvas fixes among them (see `order_check`), each component's outputs, every LLM call (model,
 //! messages, options) keyed by `<component>#<n>`, the concatenated
 //! `message` content, the final answer (`workflow_finished.outputs`), and
 //! whether the run ended in an `error`. Soft checks are reported but do not
-//! fail: the error text, and how `message` content is split into frames.
+//! fail: the error text, how `message` content is split into frames, and
+//! the order of components (and their message frames) that Go runs
+//! concurrently.
+//!
+//! Known differences are ruled divergences: they are reported as KNOWN and
+//! neither pass nor fail a case. There is exactly one (Plain, 2026-10-14):
+//! a deferred Agent's `node_finished` outputs. Go emits that event from the
+//! workflow engine's copy of the run state, which still holds the unopened
+//! stream (`{"content":{"Open":null}}`, canvas/scheduler.go RegisterDeferredNode
+//! callback); Rust reports the Agent's real outputs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -23,6 +32,10 @@ const TIMING_KEYS: &[&str] = &["_created_time", "_elapsed_time"];
 #[derive(Default, Debug)]
 pub struct Stream {
     pub finished: Vec<String>,
+    /// Per `finished` entry: its component id, and the Message that was
+    /// running when it finished (a deferred Agent finishes inside one).
+    pub finished_ids: Vec<String>,
+    pub inside: Vec<Option<String>>,
     pub outputs: BTreeMap<String, Value>,
     pub calls: BTreeMap<String, Value>,
     pub messages: Vec<String>,
@@ -32,6 +45,7 @@ pub struct Stream {
 
 pub fn parse(lines: &[Value]) -> Stream {
     let mut s = Stream::default();
+    let mut open_messages: Vec<String> = Vec::new();
     for line in lines {
         let data = line.get("data").cloned().unwrap_or(Value::Null);
         match line
@@ -39,8 +53,16 @@ pub fn parse(lines: &[Value]) -> Stream {
             .and_then(Value::as_str)
             .unwrap_or_default()
         {
+            "node_started" => {
+                if text(&data, "component_name") == "Message" {
+                    open_messages.push(text(&data, "component_id"));
+                }
+            }
             "node_finished" => {
                 let id = text(&data, "component_id");
+                open_messages.retain(|m| *m != id);
+                s.finished_ids.push(id.clone());
+                s.inside.push(open_messages.last().cloned());
                 let label = match data.get("error") {
                     Some(Value::String(e)) => format!("{id} (error: {e})"),
                     _ => id.clone(),
@@ -80,6 +102,15 @@ fn text(v: &Value, key: &str) -> String {
 pub struct Report {
     pub hard: Vec<(&'static str, String)>,
     pub soft: Vec<(&'static str, String)>,
+    pub known: Vec<(&'static str, String)>,
+}
+
+/// The one known difference: Go's outputs for a deferred Agent.
+fn is_unopened_deferred_stream(go_outputs: &Value) -> bool {
+    same(
+        go_outputs,
+        &serde_json::json!({ "content": { "Open": null } }),
+    )
 }
 
 impl Report {
@@ -88,21 +119,118 @@ impl Report {
     }
 }
 
-pub fn compare(go: &Stream, rust: &Stream) -> Report {
+/// Each component's upstream ids, from the canvas.
+pub type Topology = BTreeMap<String, Vec<String>>;
+
+pub fn topology(dsl: &Value) -> Topology {
+    dsl.get("components")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, c)| {
+            let ups = c
+                .get("upstream")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
+            (id.clone(), ups)
+        })
+        .collect()
+}
+
+/// Go runs ready components concurrently and picks them out of a map, so
+/// the order of independent components varies from run to run. Only the
+/// order the canvas fixes is checked: `a` before `b` when `a` is an
+/// ancestor of `b`, or when both are upstreams of the Message they finished
+/// inside (a Message runs its deferred Agents in template order). Every
+/// such pair Go shows must appear in the same order in Rust; the sets of
+/// finished components must match. Returns the violations.
+fn order_check(go: &Stream, rust: &Stream, topo: &Topology) -> Vec<String> {
+    let mut sorted_go = go.finished.clone();
+    let mut sorted_rust = rust.finished.clone();
+    sorted_go.sort();
+    sorted_rust.sort();
+    if sorted_go != sorted_rust {
+        return vec![format!(
+            "finished: go {:?}, rust {:?}",
+            go.finished, rust.finished
+        )];
+    }
+    let ancestor = |a: &str, b: &str| {
+        let mut stack: Vec<&str> = vec![b];
+        let mut seen = BTreeSet::new();
+        while let Some(n) = stack.pop() {
+            for up in topo.get(n).into_iter().flatten() {
+                if up == a {
+                    return true;
+                }
+                if seen.insert(up.as_str()) {
+                    stack.push(up);
+                }
+            }
+        }
+        false
+    };
+    let pos = |id: &str| rust.finished_ids.iter().position(|r| r == id);
+    let mut violations = Vec::new();
+    for i in 0..go.finished_ids.len() {
+        for j in i + 1..go.finished_ids.len() {
+            let (a, b) = (&go.finished_ids[i], &go.finished_ids[j]);
+            let same_message = match (&go.inside[i], &go.inside[j]) {
+                (Some(m), Some(n)) if m == n => {
+                    let ups = topo.get(m).cloned().unwrap_or_default();
+                    ups.contains(a) && ups.contains(b)
+                }
+                _ => false,
+            };
+            if !(ancestor(a, b) || same_message) {
+                continue;
+            }
+            if let (Some(pa), Some(pb)) = (pos(a), pos(b)) {
+                if pa > pb {
+                    violations.push(format!("go finishes {a} before {b}, rust after"));
+                }
+            }
+        }
+    }
+    violations
+}
+
+pub fn compare(go: &Stream, rust: &Stream, topo: Option<&Topology>) -> Report {
     let mut hard = Vec::new();
     let mut soft = Vec::new();
+    let mut known = Vec::new();
 
     if go.finished != rust.finished {
-        hard.push((
-            "node_sequence",
-            format!("go:   {:?}\nrust: {:?}", go.finished, rust.finished),
-        ));
+        let detail = format!("go:   {:?}\nrust: {:?}", go.finished, rust.finished);
+        match topo {
+            None => hard.push(("node_sequence", detail)),
+            Some(topo) => {
+                let violations = order_check(go, rust, topo);
+                if violations.is_empty() {
+                    soft.push(("node_order_concurrent", detail));
+                } else {
+                    hard.push((
+                        "node_sequence",
+                        format!("{}\n{detail}", violations.join("\n")),
+                    ));
+                }
+            }
+        }
     }
 
     let mut out = String::new();
     let ids: BTreeSet<&String> = go.outputs.keys().chain(rust.outputs.keys()).collect();
     for id in ids {
         match (go.outputs.get(id), rust.outputs.get(id)) {
+            (Some(g), Some(r)) if is_unopened_deferred_stream(g) => {
+                if !same(g, r) {
+                    known.push(("deferred_agent_outputs", format!("{id}: go {g}, rust {r}")));
+                }
+            }
             (Some(g), Some(r)) => {
                 if !same(g, r) {
                     let _ = writeln!(out, "{id}:");
@@ -146,7 +274,17 @@ pub fn compare(go: &Stream, rust: &Stream) -> Report {
     }
 
     let (gm, rm) = (go.messages.concat(), rust.messages.concat());
-    if gm != rm {
+    let concurrent = soft.iter().any(|(c, _)| *c == "node_order_concurrent");
+    let same_frames = || {
+        let (mut g, mut r) = (go.messages.clone(), rust.messages.clone());
+        g.sort();
+        r.sort();
+        g == r
+    };
+    if gm != rm && concurrent && same_frames() {
+        // Concurrent Messages (see order_check) emit in Go's random order.
+        soft.push(("message_order_concurrent", text_diff(&gm, &rm)));
+    } else if gm != rm {
         hard.push(("message_content", text_diff(&gm, &rm)));
     } else if go.messages != rust.messages {
         soft.push((
@@ -180,7 +318,7 @@ pub fn compare(go: &Stream, rust: &Stream) -> Report {
         _ => {}
     }
 
-    Report { hard, soft }
+    Report { hard, soft, known }
 }
 
 fn show(v: Option<&Value>) -> String {
