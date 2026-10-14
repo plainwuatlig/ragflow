@@ -1,8 +1,8 @@
 //! Categorize: one LLM call picks a category; the run goes to that
 //! category's route.
 //!
-//! Prompt text, parsing and matching follow upstream's `categorize.go` at
-//! v1.0.0-rc1 byte for byte where it matters: categories sorted in the
+//! Prompt text, parsing and matching follow upstream's `categorize.go`
+//! (main) byte for byte where it matters: categories sorted in the
 //! prompt, examples quoted Go-style (`%q`), the answer matched exactly,
 //! then case-insensitively, else the default category (no substring
 //! matching). Routes come from `items[].to[0]` (else `uuid`) and are
@@ -19,8 +19,10 @@ use crate::run::{Component, NodeCtx};
 use crate::state::Outputs;
 
 pub struct Categorize {
+    id: String,
     models: Arc<dyn Models>,
-    model: ModelRef,
+    /// `None` fails the run when the node runs, as upstream does.
+    model: Option<ModelRef>,
     /// DSL order; the default category is the first.
     categories: Vec<String>,
     descriptions: BTreeMap<String, String>,
@@ -33,9 +35,7 @@ pub struct Categorize {
 
 pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component>, String> {
     let p = node.params.as_object().cloned().unwrap_or_default();
-    let model_id = text(&p, "model_id")
-        .or_else(|| text(&p, "llm_id"))
-        .ok_or("model_id: required")?;
+    let model_id = text(&p, "model_id").or_else(|| text(&p, "llm_id"));
     let mut categories = Vec::new();
     let mut descriptions = BTreeMap::new();
     let mut examples: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -118,8 +118,9 @@ pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component
     }
     let default_category = text(&p, "default_category").unwrap_or_else(|| categories[0].clone());
     Ok(Box::new(Categorize {
+        id: node.id.clone(),
         models,
-        model: ModelRef::parse(&model_id)?,
+        model: model_id.as_deref().map(ModelRef::parse).transpose()?,
         categories,
         descriptions,
         examples,
@@ -228,6 +229,9 @@ impl Categorize {
 
 impl Component for Categorize {
     fn invoke(&self, ctx: &mut NodeCtx<'_>) -> Result<Outputs, String> {
+        let Some(model) = &self.model else {
+            return Err(r#"component: invalid param "model_id": required"#.into());
+        };
         let query = match ctx.inputs.get("query") {
             Some(Value::String(s)) => s.clone(),
             Some(Value::Null) | None => ctx
@@ -249,7 +253,7 @@ impl Component for Categorize {
         ];
         let answer = self
             .models
-            .chat(&self.model, &messages, &ChatOptions::default())
+            .chat_for(&self.id, model, &messages, &ChatOptions::default())
             .map_err(|e| format!("component: Categorize.Invoke: {e}"))?;
         let chosen = self.pick(&answer);
         let scores: Map<String, Value> = self

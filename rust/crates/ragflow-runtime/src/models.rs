@@ -57,4 +57,19 @@ pub trait Models: Send + Sync {
     ) -> Result<String, String>;
 
     fn embed(&self, model: &ModelRef, texts: &[String]) -> Result<Vec<Vec<f32>>, String>;
+
+    /// `chat` on behalf of a named component. A deferred Agent makes its
+    /// call while the consuming Message runs, so the caller cannot be
+    /// inferred from the event stream; implementations that care (the
+    /// parity oracle keys recordings by it) override this.
+    fn chat_for(
+        &self,
+        component_id: &str,
+        model: &ModelRef,
+        messages: &[ChatMessage],
+        options: &ChatOptions,
+    ) -> Result<String, String> {
+        let _ = component_id;
+        self.chat(model, messages, options)
+    }
 }

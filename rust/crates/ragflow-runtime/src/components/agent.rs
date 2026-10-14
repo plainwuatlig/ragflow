@@ -1,8 +1,11 @@
 //! Agent with no tools: one chat call with the node's system and user
-//! prompts, both strictly rendered, following upstream's `agent.go`.
+//! prompts, both strictly rendered, following upstream's `agent.go`
+//! (`invokeNow`, `mergeAgentParam`) on main.
 //!
 //! Tools, MCP servers and citations (`cite: true`) are refused when the
-//! canvas is built, so a Bot never silently runs without them.
+//! canvas is built, so a Bot never silently runs without them. A missing
+//! model id is not: upstream reports it when the Agent runs
+//! (`component: invalid param "model_id": required`), and so does this.
 
 use std::sync::Arc;
 
@@ -18,8 +21,9 @@ use crate::template::render_strict;
 const USER_PROMPT_PLACEHOLDER: &str = "This is the order you need to send to the agent.";
 
 pub struct Agent {
+    id: String,
     models: Arc<dyn Models>,
-    model: ModelRef,
+    model: Option<ModelRef>,
     system_prompt: String,
     user_prompt: String,
     options: ChatOptions,
@@ -27,9 +31,7 @@ pub struct Agent {
 
 pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component>, String> {
     let p = node.params.as_object().cloned().unwrap_or_default();
-    let model_id = text(&p, "model_id")
-        .or_else(|| text(&p, "llm_id"))
-        .ok_or("model_id: required")?;
+    let model_id = text(&p, "model_id").or_else(|| text(&p, "llm_id"));
     for key in ["tools", "mcp"] {
         if p.get(key)
             .and_then(Value::as_array)
@@ -55,18 +57,27 @@ pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component
     if let Some(v) = text(&p, "user_prompt").filter(|v| !falls_back(v)) {
         user_prompt = v;
     }
-    let max_tokens_enabled = p.get("maxTokensEnabled").and_then(Value::as_bool) != Some(false);
+    // A sampler is sent only when set and its editor switch is not off
+    // (`gateSampler`, llm.go; applied in mergeAgentParam, agent.go).
+    let enabled = |flag: &str| p.get(flag).and_then(Value::as_bool) != Some(false);
     let options = ChatOptions {
-        temperature: p.get("temperature").and_then(Value::as_f64),
-        top_p: p.get("top_p").and_then(Value::as_f64),
+        temperature: p
+            .get("temperature")
+            .and_then(Value::as_f64)
+            .filter(|_| enabled("temperatureEnabled")),
+        top_p: p
+            .get("top_p")
+            .and_then(Value::as_f64)
+            .filter(|_| enabled("topPEnabled")),
         max_tokens: p
             .get("max_tokens")
             .and_then(Value::as_u64)
-            .filter(|_| max_tokens_enabled),
+            .filter(|_| enabled("maxTokensEnabled")),
     };
     Ok(Box::new(Agent {
+        id: node.id.clone(),
         models,
-        model: ModelRef::parse(&model_id)?,
+        model: model_id.as_deref().map(ModelRef::parse).transpose()?,
         system_prompt,
         user_prompt,
         options,
@@ -141,10 +152,11 @@ impl Component for Agent {
                 .map(|v| crate::template::to_text(&v))
                 .unwrap_or_default();
         }
+        let Some(model) = &self.model else {
+            return Err(r#"component: invalid param "model_id": required"#.into());
+        };
         if user.is_empty() && system.is_empty() {
-            return Err(
-                "user_prompt: at least one of user_prompt or system_prompt must be set".into(),
-            );
+            return Err(r#"component: invalid param "user_prompt": at least one of user_prompt or system_prompt must be set"#.into());
         }
         if user.is_empty() {
             user = system.clone();
@@ -160,7 +172,9 @@ impl Component for Agent {
             role: "user",
             content: user,
         });
-        let content = self.models.chat(&self.model, &messages, &self.options)?;
+        let content = self
+            .models
+            .chat_for(&self.id, model, &messages, &self.options)?;
 
         let mut out = Outputs::new();
         out.insert("content".into(), json!(content));
