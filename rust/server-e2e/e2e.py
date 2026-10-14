@@ -440,10 +440,10 @@ def misc(stack, stub, canvas, api, out):
 
     # Non-streaming completions.
     r = both(lambda base: jcall(base, "POST", "/api/v1/agents/chat/completions", token=api,
-                                body={"agent_id": canvas, "query": "停車場有充電樁嗎？"}))
+                                body={"agent_id": canvas, "query": "Is there a charging point?"}))
     same("non-stream completion: same reply", r["go"][1], r["rust"][1], cleaned)
     # The agentbot stream carries the same events as the chat stream.
-    ev = both(lambda base: sse(base, f"/api/v1/agentbots/{canvas}/completions", api, {"query": "附近有什麼好吃的小吃？"})[1])
+    ev = both(lambda base: sse(base, f"/api/v1/agentbots/{canvas}/completions", api, {"query": "Where can I get a snack nearby?"})[1])
     problems = diff_events(ev["go"], ev["rust"])
     record("agentbot completions: events", "FAIL" if problems else "PASS", "\n         ".join(problems[:4]))
     # Errors.
@@ -476,7 +476,7 @@ def misc(stack, stub, canvas, api, out):
     # The created session can be run by both servers' ids.
     for side, base in (("go", GO), ("rust", RUST)):
         sid = r[side][1]["data"]["id"]
-        st, fr, raw = sse(base, "/api/v1/agents/chat/completions", api, {"agent_id": canvas, "query": "停車場有充電樁嗎？", "session_id": sid, "stream": True})
+        st, fr, raw = sse(base, "/api/v1/agents/chat/completions", api, {"agent_id": canvas, "query": "Is there a charging point?", "session_id": sid, "stream": True})
         ok = any(f != "[DONE]" and f.get("event") == "workflow_finished" for f in fr)
         record(f"a session made by POST runs on {side}", "PASS" if ok else "FAIL", str(fr)[:200])
     other = both(lambda base: jcall(base, "POST", f"/api/v1/agents/{canvas}/sessions", token=api, body={}))

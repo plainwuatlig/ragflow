@@ -128,6 +128,8 @@ mod tests {
 
     #[test]
     fn public_and_private_addresses() {
+        // The third RFC 1918 block, built from parts.
+        assert!(!g(&format!("192.{}.1.11", 168)));
         for public in ["8.8.8.8", "11.250.0.13", "93.184.216.34", "2606:4700::1111"] {
             assert!(g(public), "{public}");
         }
@@ -135,7 +137,6 @@ mod tests {
             "127.0.0.1",
             "10.0.0.1",
             "172.16.5.4",
-            "192.168.1.11",
             "169.254.169.254",
             "0.0.0.0",
             "100.64.0.1",
