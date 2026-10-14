@@ -24,7 +24,7 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "signal"] }
 tokio-stream = "0.1"
 mysql = { version = "25", default-features = false, features = ["minimal"] }
-redis = { version = "0.27", default-features = false }
+redis = { version = "0.27", default-features = false, features = ["script"] }
 ureq = { version = "2", default-features = false, features = ["json"] }
 sha1 = "0.10"
 hmac = "0.12"
@@ -34,6 +34,8 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 chrono.workspace = true
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 
 [[bin]]
 name = "ragflow-server"
