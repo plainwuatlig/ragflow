@@ -213,6 +213,17 @@ impl Registry {
         });
         r
     }
+
+    /// Adds the Retrieval component, searching through `service`.
+    pub fn with_retrieval(
+        mut self,
+        service: std::sync::Arc<dyn crate::retrieval::RetrievalService>,
+    ) -> Self {
+        self.register("Retrieval", move |n: &Node| {
+            crate::components::retrieval::factory(n, service.clone())
+        });
+        self
+    }
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]

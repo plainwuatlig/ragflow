@@ -9,6 +9,7 @@ mod dsl;
 mod event;
 mod graph;
 pub mod models;
+pub mod retrieval;
 mod run;
 mod state;
 pub mod template;

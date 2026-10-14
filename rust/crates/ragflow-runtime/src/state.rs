@@ -17,6 +17,9 @@ pub struct RunState {
     pub env: Map<String, Value>,
     pub globals: Map<String, Value>,
     pub outputs: BTreeMap<String, Outputs>,
+    /// Citation references recorded by Retrieval (`CanvasState.Retrieval`):
+    /// `chunks` (deduped by `id`, first wins) and `doc_aggs` (by doc name).
+    pub retrieval: Map<String, Value>,
 }
 
 impl RunState {
