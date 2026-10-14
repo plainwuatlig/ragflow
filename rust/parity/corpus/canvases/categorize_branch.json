@@ -1,0 +1,34 @@
+{
+  "globals": { "sys.query": "", "sys.user_id": "", "sys.conversation_turns": 0, "sys.files": [] },
+  "components": {
+    "begin": {
+      "obj": { "component_name": "Begin", "params": { "inputs": {}, "mode": "conversational" } },
+      "upstream": [], "downstream": ["Categorize:Route"]
+    },
+    "Categorize:Route": {
+      "obj": { "component_name": "Categorize", "params": {
+        "llm_id": "parity-chat@OpenAI",
+        "query": "sys.query",
+        "message_history_window_size": 1,
+        "items": [
+          { "name": "Billing", "description": "Invoices, refunds and payments", "examples": [{ "value": "I was charged twice" }, { "value": "where is my\nreceipt" }], "to": ["Message:Billing"] },
+          { "name": "Tech", "description": "Bugs, crashes and error messages", "examples": [{ "value": "The app crashes on \"login\"" }], "to": ["Message:Tech"] },
+          { "name": "Other", "description": "", "examples": [], "to": ["Message:Other"] }
+        ]
+      } },
+      "upstream": ["begin"], "downstream": ["Message:Billing", "Message:Tech", "Message:Other"]
+    },
+    "Message:Billing": {
+      "obj": { "component_name": "Message", "params": { "content": ["Billing will help with: {sys.query} [{Categorize:Route@category_name}]", "never used"] } },
+      "upstream": ["Categorize:Route"], "downstream": []
+    },
+    "Message:Tech": {
+      "obj": { "component_name": "Message", "params": { "content": ["Tech support: {{Categorize:Route@category}} / scores {Categorize:Route@scores}"] } },
+      "upstream": ["Categorize:Route"], "downstream": []
+    },
+    "Message:Other": {
+      "obj": { "component_name": "Message", "params": { "content": ["Other: {sys.query}"] } },
+      "upstream": ["Categorize:Route"], "downstream": []
+    }
+  }
+}

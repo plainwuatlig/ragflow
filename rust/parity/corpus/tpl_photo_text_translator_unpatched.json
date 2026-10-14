@@ -1,0 +1,5 @@
+{
+  "canvas": "../../../internal/agent/templates/photo_text_translator.json",
+  "query": "Please translate the menu into English.",
+  "recordings": {}
+}

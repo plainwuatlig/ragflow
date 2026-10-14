@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/branch_join.json",
+  "query": "hi there",
+  "recordings": { "Categorize:Intent#0": "Chitchat" }
+}

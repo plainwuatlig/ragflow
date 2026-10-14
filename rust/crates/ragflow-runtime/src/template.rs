@@ -60,10 +60,108 @@ pub fn render_display(template: &str, state: &RunState) -> String {
         .replace_all(template, |caps: &regex::Captures| {
             state
                 .lookup(&caps[1])
-                .map(|v| to_text(&v))
+                .map(|v| display_text(&v))
                 .unwrap_or_default()
         })
         .into_owned()
+}
+
+/// A display-mode value: strings as they are, anything else as Go's
+/// `encoding/json` writes it with HTML escaping off (upstream's
+/// `stringifyDisplayValue`): object keys sorted, numbers in Go's float
+/// format, Go's string escapes.
+pub fn display_text(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        other => {
+            let mut out = String::new();
+            go_json(&mut out, other);
+            out
+        }
+    }
+}
+
+fn go_json(out: &mut String, value: &Value) {
+    match value {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Number(n) => match (n.as_i64(), n.as_u64()) {
+            (Some(i), _) => out.push_str(&i.to_string()),
+            (None, Some(u)) => out.push_str(&u.to_string()),
+            _ => out.push_str(&go_json_float(n.as_f64().unwrap_or(0.0))),
+        },
+        Value::String(s) => go_json_string(out, s),
+        Value::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                go_json(out, item);
+            }
+            out.push(']');
+        }
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for (i, key) in keys.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                go_json_string(out, key);
+                out.push(':');
+                go_json(out, &map[key]);
+            }
+            out.push('}');
+        }
+    }
+}
+
+/// encoding/json's float64: shortest digits, plain notation unless the
+/// magnitude is below 1e-6 or at least 1e21, where `1e+21` / `1e-7`.
+fn go_json_float(f: f64) -> String {
+    let abs = f.abs();
+    if abs != 0.0 && !(1e-6..1e21).contains(&abs) {
+        let sci = format!("{f:e}");
+        let (mantissa, exp) = sci.split_once('e').expect("{:e} has an exponent");
+        let exp: i32 = exp.parse().expect("exponent is an integer");
+        let sign = if exp < 0 { '-' } else { '+' };
+        let digits = if exp < 0 {
+            exp.abs().to_string()
+        } else {
+            format!("{exp:02}")
+        };
+        format!("{mantissa}e{sign}{digits}")
+    } else {
+        format!("{f}")
+    }
+}
+
+fn go_json_string(out: &mut String, s: &str) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            c if (c as u32) < 0x20 => {
+                let b = c as u8;
+                out.push_str("\\u00");
+                out.push(HEX[(b >> 4) as usize] as char);
+                out.push(HEX[(b & 0xf) as usize] as char);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 /// The reference names a template uses, in order of appearance.

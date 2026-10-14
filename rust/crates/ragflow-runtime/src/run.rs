@@ -233,12 +233,48 @@ impl Bot {
         events.emit(Event::MessageEnd);
         events.emit(Event::WorkflowFinished {
             query: Value::String(input.query),
-            outputs: Value::Object(answer.clone()),
+            outputs: workflow_outputs(&answer),
             elapsed_time: started.elapsed().as_secs_f64(),
             created_at: unix_now(),
         });
         Ok(RunOutcome { answer, state })
     }
+}
+
+/// `workflow_finished.outputs` as upstream shapes it
+/// (`workflowOutputsFromTerminal`, service/agent.go): the answer's `content`
+/// as a bare string, or `{content, downloads?, attachment?}` when either of
+/// those is non-empty; `""` when there is no answer.
+fn workflow_outputs(answer: &Outputs) -> Value {
+    if answer.is_empty() {
+        return Value::String(String::new());
+    }
+    let content = answer
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let present = |key: &str| {
+        answer.get(key).filter(|v| match v {
+            Value::Null => false,
+            Value::Array(a) => !a.is_empty(),
+            Value::Object(m) => !m.is_empty(),
+            _ => true,
+        })
+    };
+    let (downloads, attachment) = (present("downloads"), present("attachment"));
+    if downloads.is_none() && attachment.is_none() {
+        return Value::String(content);
+    }
+    let mut out = Map::new();
+    out.insert("content".into(), Value::String(content));
+    if let Some(d) = downloads {
+        out.insert("downloads".into(), d.clone());
+    }
+    if let Some(a) = attachment {
+        out.insert("attachment".into(), a.clone());
+    }
+    Value::Object(out)
 }
 
 /// Whether a finished `parent` reaches `child`.

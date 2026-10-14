@@ -1,0 +1,6 @@
+{
+  "canvas": "canvases/agent_chain.json",
+  "query": "Write a tagline for a bakery",
+  "globals": { "env.limit": 50 },
+  "recordings": { "Agent:Draft#0": "Fresh bread, every day, for everyone.", "Agent:Polish#0": "Fresh bread daily." }
+}

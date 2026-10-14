@@ -1,0 +1,25 @@
+{
+  "globals": { "sys.query": "" },
+  "components": {
+    "begin": { "obj": { "component_name": "Begin", "params": { "inputs": {} } }, "upstream": [], "downstream": ["Agent:Draft"] },
+    "Agent:Draft": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@OpenAI", "sys_prompt": "",
+        "prompts": [{ "role": "user", "content": "" }], "tools": [], "mcp": []
+      } },
+      "upstream": ["begin"], "downstream": ["Agent:Polish"]
+    },
+    "Agent:Polish": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@OpenAI", "sys_prompt": "Polish the draft. Keep it under {env.limit} words.",
+        "prompts": [{ "role": "user", "content": "Draft:\n{Agent:Draft@content}" }],
+        "temperature": 0.7, "max_tokens": 128, "maxTokensEnabled": false, "tools": [], "mcp": []
+      } },
+      "upstream": ["Agent:Draft"], "downstream": ["Message:Out"]
+    },
+    "Message:Out": {
+      "obj": { "component_name": "Message", "params": { "content": ["{Agent:Polish@content}"] } },
+      "upstream": ["Agent:Polish"], "downstream": []
+    }
+  }
+}

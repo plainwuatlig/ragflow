@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/agent_join.json",
+  "query": "Should we adopt a four-day week?",
+  "recordings": { "Agent:Pro#0": "More focus.", "Agent:Con#0": "Less coverage." }
+}

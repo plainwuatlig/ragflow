@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ragflow-runtime"]
+members = ["crates/ragflow-runtime", "crates/ragflow-parity"]
 
 [workspace.package]
 edition = "2021"
