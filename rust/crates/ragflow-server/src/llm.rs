@@ -188,7 +188,7 @@ impl ServerModels {
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     if self.cancel.load(Ordering::SeqCst) {
-                        return Err("context canceled".into());
+                        return Err(ragflow_runtime::models::CANCELLED.into());
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {

@@ -383,18 +383,22 @@ impl Bot {
 
     /// `agentRunReferencePayload`: the run's citations, without the document
     /// aggregates when an Agent ran without `cite` (upstream drops them).
-    fn reference(&self, state: &RunState) -> Option<Value> {
+    /// `reached` are the Agents the run got to, which upstream sees as having
+    /// output (a deferred Agent's bucket holds its stream even when the
+    /// stream failed).
+    fn reference(&self, state: &RunState, reached: &[&str]) -> Option<Value> {
         let mut reference = crate::components::retrieval::retrieval_reference(state)?;
-        let agent_ran =
-            self.plan.graph.nodes.values().any(|n| {
-                n.name == "Agent" && state.outputs.get(&n.id).is_some_and(|o| !o.is_empty())
-            });
-        let cite = self.plan.graph.nodes.values().any(|n| {
-            n.name == "Agent"
-                && state.outputs.get(&n.id).is_some_and(|o| !o.is_empty())
-                && n.params.get("cite").and_then(Value::as_bool) == Some(true)
-        });
-        if agent_ran && !cite {
+        let ran: Vec<&Node> = self
+            .plan
+            .graph
+            .nodes
+            .values()
+            .filter(|n| n.name == "Agent" && reached.contains(&n.id.as_str()))
+            .collect();
+        let cite = ran
+            .iter()
+            .any(|n| n.params.get("cite").and_then(Value::as_bool) == Some(true));
+        if !ran.is_empty() && !cite {
             if let Some(map) = reference.as_object_mut() {
                 map.remove("doc_aggs");
             }
@@ -553,7 +557,7 @@ impl Bot {
                                 content: visible.clone(),
                             });
                         }
-                        let reference = self.reference(&state);
+                        let reference = self.reference(&state, &reached_agents(&status, graph));
                         if let Some(hook) = finish {
                             hook(Finish {
                                 answer: &answer,
@@ -627,7 +631,7 @@ impl Bot {
                 message,
             });
         }
-        let reference = self.reference(&state);
+        let reference = self.reference(&state, &reached_agents(&status, graph));
         if let Some(hook) = finish {
             hook(Finish {
                 answer: &answer,
@@ -661,6 +665,15 @@ impl Bot {
             deferred_failure: None,
         })
     }
+}
+
+/// The Agents the run got to.
+fn reached_agents<'a>(status: &BTreeMap<&'a str, Status>, graph: &'a Graph) -> Vec<&'a str> {
+    status
+        .iter()
+        .filter(|(id, s)| **s == Status::Done && graph.nodes[**id].name == "Agent")
+        .map(|(id, _)| *id)
+        .collect()
 }
 
 /// The first terminal (by id) with outputs.

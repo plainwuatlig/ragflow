@@ -318,25 +318,37 @@ impl Component for Agent {
             role: "user",
             content: user,
         });
-        let content = if ctx.stream_messages {
+        let called = if ctx.stream_messages {
             // A Message is running this Agent in place: the answer goes out
             // as it arrives, before the Agent's node finishes.
             ctx.streamed = true;
             let events = &mut *ctx.events;
-            self.models.chat_stream_for(
-                &self.id,
-                &model,
-                &messages,
-                &p.options(),
-                &mut |delta| {
+            self.models
+                .chat_stream_for(&self.id, &model, &messages, &p.options(), &mut |delta| {
                     events.emit(Event::Message {
                         content: delta.to_string(),
                     })
-                },
-            )?
+                })
         } else {
             self.models
-                .chat_for(&self.id, &model, &messages, &p.options())?
+                .chat_for(&self.id, &model, &messages, &p.options())
+        };
+        let content = match called {
+            Ok(content) => content,
+            // A cancelled call is the run's, not the Agent's, to report.
+            Err(e) if e == crate::models::CANCELLED => return Err(e),
+            // Upstream keeps a failed model call in the data flow as the
+            // `_ERROR` output; a Message running the Agent shows the same
+            // text as the reply.
+            Err(e) => {
+                let text = format!("**ERROR**: {e}");
+                if ctx.stream_messages {
+                    return Err(text);
+                }
+                let mut out = Outputs::new();
+                out.insert("_ERROR".into(), json!(text));
+                return Ok(out);
+            }
         };
 
         let mut out = Outputs::new();

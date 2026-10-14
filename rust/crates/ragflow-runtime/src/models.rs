@@ -2,6 +2,9 @@
 //! does no network I/O. `ragflow-serve` supplies an OpenAI-compatible
 //! implementation.
 
+/// What a model client returns when the run was cancelled under its call.
+pub const CANCELLED: &str = "context canceled";
+
 /// A RAGFlow model id: `model@provider`, `model@instance@provider` (the
 /// model name may itself contain `@`: the split is right-anchored), or a bare
 /// 32-character hex `tenant_model` id, which has no provider.
