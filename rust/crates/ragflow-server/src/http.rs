@@ -1629,7 +1629,15 @@ mod tests {
             .await;
             let f = frames(&text);
             let err = f.iter().find(|x| x["code"] == 500).expect("an error frame");
-            assert!(err["message"].as_str().unwrap().contains("sys.nope"));
+            let shown = err["message"].as_str().unwrap();
+            assert!(
+                shown.starts_with(
+                    "agent invoke: [NodeRunError] agent: component \"Message\" invoke: Message: "
+                ),
+                "{shown}"
+            );
+            assert!(shown.ends_with("\n\nnode path: [Message:a]"), "{shown}");
+            assert!(shown.contains("sys.nope"));
             assert_eq!(err["data"], false);
         }
     }
