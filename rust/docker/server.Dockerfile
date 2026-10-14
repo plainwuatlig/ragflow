@@ -11,8 +11,9 @@
 #   docker build -f rust/docker/server.Dockerfile \
 #     --build-context upstream=/tmp/upstream -t ragflow-server .
 #
-# Run it beside RAGFlow's stores with the environment listed in
-# rust/crates/ragflow-server/src/main.rs.
+# rust/docker/build-server.sh does both steps and tags the image with the commit.
+# Run it beside RAGFlow's stores with the environment in rust/README.md
+# ("Environment contract").
 
 ARG BUILDER_IMAGE=infiniflow/github_action_runner:latest@sha256:b712330a93b685625e4e4e0f3092b255eb96db9120a01ebfd3c392f7e644d47c
 ARG RAGFLOW_IMAGE=infiniflow/ragflow:v1.0.0-rc1@sha256:31ccf0336d8910f6d90ac7d4fff766cc0483ec10042b906a377f27bfe09f818b
@@ -57,6 +58,14 @@ RUN apt-get update \
 ENV RAGFLOW_DICT_PATH=/usr/share/infinity/resource \
     RAGFLOW_MODELS_DIR=/ragflow/conf/models
 WORKDIR /work
+ARG REVISION=unknown
+ARG UPSTREAM_COMMIT=unknown
+LABEL org.opencontainers.image.title="ragflow-server" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.base.name="ubuntu:24.04" \
+      ragflow.upstream.commit="${UPSTREAM_COMMIT}"
 USER 65534:65534
 EXPOSE 9380
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["/usr/local/bin/ragflow-server", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/ragflow-server"]
