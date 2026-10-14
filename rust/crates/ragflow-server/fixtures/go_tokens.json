@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "hex32",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+      "token": "ImExYjJjM2Q0YTFiMmMzZDRhMWIyYzNkNGExYjJjM2Q0Ig.as8oSA.N4eGbbU-HDhCPaFLesTMgFwMLw8"
+    },
+    {
+      "name": "hex32-other",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "00112233445566778899aabbccddeeff",
+      "token": "IjAwMTEyMjMzNDQ1NTY2Nzc4ODk5YWFiYmNjZGRlZWZmIg.as8oSA.o8MyEtXBF_PDfPV9Pf1aF3dp0yo"
+    },
+    {
+      "name": "invalidated",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "INVALID_0123456789abcdef0123456789abcdef",
+      "token": "IklOVkFMSURfMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYi.as8oSA.XCkaEpLbJdRvMLNrzJg7lxtDh_o"
+    },
+    {
+      "name": "long-compressible",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "token": ".eJxSSkwahaNwFOKCSoABAGUKMQQ.as8oSA.3-mtwc3HQHtNRrUVVYV5fI0ijJI"
+    },
+    {
+      "name": "unicode",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "令牌-token-ü-0123456789abcdef0123456789",
+      "token": "IuS7pOeJjC10b2tlbi3DvC0wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OSI.as8oSA.kE5PkrMnMh6BjHIj3W5u1_d3-WY"
+    },
+    {
+      "name": "quote-and-slash",
+      "secret": "0123456789abcdef0123456789abcdef",
+      "access_token": "with \"quotes\" and \\ slash and </script> & more 0123456789",
+      "token": "IndpdGggXCJxdW90ZXNcIiBhbmQgXFwgc2xhc2ggYW5kIFx1MDAzYy9zY3JpcHRcdTAwM2UgXHUwMDI2IG1vcmUgMDEyMzQ1Njc4OSI.as8oSA.Efflw4FO0Li9Rvbv1rBah7hEN7U"
+    },
+    {
+      "name": "hex32",
+      "secret": "infiniflow-token",
+      "access_token": "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+      "token": "ImExYjJjM2Q0YTFiMmMzZDRhMWIyYzNkNGExYjJjM2Q0Ig.as8oSA.vaf80qq2n1q6y_lS6N_DhU7MHPo"
+    },
+    {
+      "name": "hex32-other",
+      "secret": "infiniflow-token",
+      "access_token": "00112233445566778899aabbccddeeff",
+      "token": "IjAwMTEyMjMzNDQ1NTY2Nzc4ODk5YWFiYmNjZGRlZWZmIg.as8oSA.h5kT2zh5v-6k1Rw7SGN80L0VGUs"
+    },
+    {
+      "name": "invalidated",
+      "secret": "infiniflow-token",
+      "access_token": "INVALID_0123456789abcdef0123456789abcdef",
+      "token": "IklOVkFMSURfMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYi.as8oSA.pZKr9ce4OCh0ou59PLjm6r_AAVs"
+    },
+    {
+      "name": "long-compressible",
+      "secret": "infiniflow-token",
+      "access_token": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "token": ".eJxSSkwahaNwFOKCSoABAGUKMQQ.as8oSA.iTOBxyT_pzusNZHcDD95yCreG-8"
+    },
+    {
+      "name": "unicode",
+      "secret": "infiniflow-token",
+      "access_token": "令牌-token-ü-0123456789abcdef0123456789",
+      "token": "IuS7pOeJjC10b2tlbi3DvC0wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OSI.as8oSA.-2gPkBvEJ4LsD0vq5OKON-J1E0o"
+    },
+    {
+      "name": "quote-and-slash",
+      "secret": "infiniflow-token",
+      "access_token": "with \"quotes\" and \\ slash and </script> & more 0123456789",
+      "token": "IndpdGggXCJxdW90ZXNcIiBhbmQgXFwgc2xhc2ggYW5kIFx1MDAzYy9zY3JpcHRcdTAwM2UgXHUwMDI2IG1vcmUgMDEyMzQ1Njc4OSI.as8oSA.ipqpwwdwogROi_MT532yu2-nMjY"
+    },
+    {
+      "name": "hex32",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+      "token": "ImExYjJjM2Q0YTFiMmMzZDRhMWIyYzNkNGExYjJjM2Q0Ig.as8oSA.r6SIcoY9MuFuG5PA_Ev3O52dfMo"
+    },
+    {
+      "name": "hex32-other",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "00112233445566778899aabbccddeeff",
+      "token": "IjAwMTEyMjMzNDQ1NTY2Nzc4ODk5YWFiYmNjZGRlZWZmIg.as8oSA.Ci-z2Jf4SyKbUmRUgDk6XJSvXWI"
+    },
+    {
+      "name": "invalidated",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "INVALID_0123456789abcdef0123456789abcdef",
+      "token": "IklOVkFMSURfMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYi.as8oSA.gXA_87SJckIM3789TaYzAJRCQeo"
+    },
+    {
+      "name": "long-compressible",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "token": ".eJxSSkwahaNwFOKCSoABAGUKMQQ.as8oSA.Ufy2-3kHvaYjlvrj4n2SgV0ZuWo"
+    },
+    {
+      "name": "unicode",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "令牌-token-ü-0123456789abcdef0123456789",
+      "token": "IuS7pOeJjC10b2tlbi3DvC0wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OSI.as8oSA.HmyYUBfU-iZOXVLZeMtth4vkFkA"
+    },
+    {
+      "name": "quote-and-slash",
+      "secret": "pässwörd-with-ünicode",
+      "access_token": "with \"quotes\" and \\ slash and </script> & more 0123456789",
+      "token": "IndpdGggXCJxdW90ZXNcIiBhbmQgXFwgc2xhc2ggYW5kIFx1MDAzYy9zY3JpcHRcdTAwM2UgXHUwMDI2IG1vcmUgMDEyMzQ1Njc4OSI.as8oSA.WHgfEWVhtOnhRXCAV27E2vGGCyM"
+    }
+  ]
+}

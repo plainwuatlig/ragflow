@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
 
+use crate::event::Event;
 use crate::graph::Node;
 use crate::models::{ChatMessage, ChatOptions, ModelRef, Models};
 use crate::run::{Component, NodeCtx};
@@ -48,7 +49,12 @@ struct Params {
     tools: bool,
     mcp: bool,
     cite: bool,
+    /// `message_history_window_size`: prior conversation turns in the prompt.
+    history_window: i64,
 }
+
+/// upstream's `defaultAgentMessageHistoryWindowSize`.
+const DEFAULT_HISTORY_WINDOW: i64 = 13;
 
 impl Params {
     fn refusal(&self) -> Option<String> {
@@ -68,6 +74,7 @@ impl Params {
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,
+            stream: true,
         }
     }
 }
@@ -144,12 +151,22 @@ fn merge(base: &Params, m: &Map<String, Value>) -> Params {
     if let Some(v) = m.get("cite").and_then(Value::as_bool) {
         p.cite = v;
     }
+    // intFrom: a JSON number truncates.
+    if let Some(v) = m.get("message_history_window_size").and_then(Value::as_f64) {
+        p.history_window = v as i64;
+    }
     p
 }
 
 pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component>, String> {
     let params = node.params.as_object().cloned().unwrap_or_default();
-    let base = merge(&Params::default(), &params);
+    let base = merge(
+        &Params {
+            history_window: DEFAULT_HISTORY_WINDOW,
+            ..Params::default()
+        },
+        &params,
+    );
     if let Some(refusal) = base.refusal() {
         return Err(refusal);
     }
@@ -262,13 +279,77 @@ impl Component for Agent {
                 content: system,
             });
         }
+        // buildAgentInputMessages: the last 2N-1 completed turns, then the
+        // current prompt, which replaces a trailing user turn.
+        let mut turns = Vec::new();
+        if p.history_window > 0 {
+            let limit = (p.history_window * 2 - 1) as usize;
+            let prior = ctx.state.prior_history();
+            let start = prior.len().saturating_sub(limit);
+            for entry in &prior[start..] {
+                let role = entry
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let text = entry
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let role = match role {
+                    "user" => "user",
+                    "assistant" => "assistant",
+                    "system" => "system",
+                    "tool" => "tool",
+                    _ => continue,
+                };
+                if !text.is_empty() {
+                    turns.push(ChatMessage {
+                        role,
+                        content: text.to_string(),
+                    });
+                }
+            }
+        }
+        if turns.last().is_some_and(|m| m.role == "user") {
+            turns.pop();
+        }
+        messages.extend(turns);
         messages.push(ChatMessage {
             role: "user",
             content: user,
         });
-        let content = self
-            .models
-            .chat_for(&self.id, &model, &messages, &p.options())?;
+        let called = if ctx.stream_messages {
+            // A Message is running this Agent in place: the answer goes out
+            // as it arrives, before the Agent's node finishes.
+            ctx.streamed = true;
+            let events = &mut *ctx.events;
+            self.models
+                .chat_stream_for(&self.id, &model, &messages, &p.options(), &mut |delta| {
+                    events.emit(Event::Message {
+                        content: delta.to_string(),
+                    })
+                })
+        } else {
+            self.models
+                .chat_for(&self.id, &model, &messages, &p.options())
+        };
+        let content = match called {
+            Ok(content) => content,
+            // A cancelled call is the run's, not the Agent's, to report.
+            Err(e) if e == crate::models::CANCELLED => return Err(e),
+            // Upstream keeps a failed model call in the data flow as the
+            // `_ERROR` output; a Message running the Agent shows the same
+            // text as the reply.
+            Err(e) => {
+                let text = format!("**ERROR**: {e}");
+                if ctx.stream_messages {
+                    return Err(text);
+                }
+                let mut out = Outputs::new();
+                out.insert("_ERROR".into(), json!(text));
+                return Ok(out);
+            }
+        };
 
         let mut out = Outputs::new();
         out.insert("content".into(), json!(content));

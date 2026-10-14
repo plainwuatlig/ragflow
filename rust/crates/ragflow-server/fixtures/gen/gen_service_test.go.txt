@@ -1,0 +1,152 @@
+package service
+
+// Writes the fixtures ragflow-server's byte-exact tests read, from upstream's
+// own unexported functions. Copy this file to internal/service/ as
+// zz_rustfixtures_test.go and run, from the repository root:
+//
+//	RUST_FIXTURES_OUT=$PWD/rust/crates/ragflow-server/fixtures/go_session.json \
+//	  GOTOOLCHAIN=go1.27.2 CGO_ENABLED=0 go test -run TestWriteRustFixtures ./internal/service
+//
+// then delete the copy.
+
+import (
+	"encoding/json"
+	"os"
+	"testing"
+
+	"ragflow/internal/agent/canvas"
+	dslpkg "ragflow/internal/agent/dsl"
+)
+
+func TestWriteRustFixtures(t *testing.T) {
+	out := os.Getenv("RUST_FIXTURES_OUT")
+	if out == "" {
+		t.Skip("RUST_FIXTURES_OUT not set")
+	}
+	fixtures := map[string]any{}
+
+	// pythonHistoryRepr
+	reprInputs := []any{
+		nil, true, false, "plain", "it's a \\ test\n\r\t", float64(3), float64(2.5), float64(1e21), float64(1e-7),
+		map[string]any{"content": "a", "downloads": []any{}, "_created_time": "t", "_elapsed_time": 0.5, "extra": "x", "b": float64(1)},
+		[]any{"a", float64(1), nil, map[string]any{"k": "v"}},
+		map[string]any{},
+		[]any{},
+	}
+	var reprs []map[string]any
+	for _, in := range reprInputs {
+		reprs = append(reprs, map[string]any{"input": in, "repr": pythonHistoryRepr(in), "user_history": renderUserHistoryValue(in)})
+	}
+	fixtures["repr"] = reprs
+
+	// deriveAgentSessionName
+	nameInputs := []any{
+		nil, "hello", map[string]any{"query": "q", "x": 1}, map[string]any{"question": "w"}, map[string]any{"a": float64(1)},
+		map[string]any{}, map[string]any{"query": ""}, float64(5),
+	}
+	var names []map[string]any
+	for _, in := range nameInputs {
+		names = append(names, map[string]any{"input": in, "name": deriveAgentSessionName(in)})
+	}
+	long := ""
+	for i := 0; i < 300; i++ {
+		long += "令"
+	}
+	names = append(names, map[string]any{"input": long, "name": deriveAgentSessionName(long)})
+	fixtures["names"] = names
+
+	// NormalizeForRun and ResetForNewSession
+	dsls := []map[string]any{
+		{"graph": map[string]any{"nodes": []any{}, "edges": []any{
+			map[string]any{"sourceHandle": "end", "targetHandle": "start"},
+			map[string]any{"sourceHandle": "agentBottom", "targetHandle": "end"},
+			map[string]any{"id": "e3"},
+		}}, "components": map[string]any{"Message:a": map[string]any{"obj": map[string]any{"component_name": "Message", "params": map[string]any{
+			"content": []any{"x {IterationItem:Foo@item} {IterationItem:Foo@index} {IterationItem:Foo@items}"}}}}}},
+	}
+	var norms []map[string]any
+	for _, d := range dsls {
+		norms = append(norms, map[string]any{"input": d, "normalized": dslpkg.NormalizeForRun(d)})
+	}
+	fixtures["normalize"] = norms
+	resets := []map[string]any{
+		{"history": []any{[]any{"user", "x"}}, "path": []any{"a"}, "globals": map[string]any{"sys.history": []any{"user: x"}, "sys.query": "x"}},
+		{},
+		{"components": map[string]any{}},
+	}
+	var rs []map[string]any
+	for _, d := range resets {
+		rs = append(rs, map[string]any{"input": d, "reset": dslpkg.ResetForNewSession(d)})
+	}
+	fixtures["reset"] = rs
+
+	// buildPersistedAgentDSL
+	type scenario struct {
+		Name    string         `json:"name"`
+		RunDSL  map[string]any `json:"run_dsl"`
+		Sys     map[string]any `json:"sys"`
+		Env     map[string]any `json:"env"`
+		Globals map[string]any `json:"globals"`
+		History []any          `json:"history"` // [role, payload]
+		Memory  []any          `json:"memory"`
+		Out     map[string]any `json:"persisted"`
+	}
+	scenarios := []scenario{
+		{
+			Name: "first turn",
+			RunDSL: map[string]any{
+				"components": map[string]any{"begin": map[string]any{}},
+				"history":    []any{}, "path": []any{}, "memory": []any{},
+				"globals": map[string]any{"sys.history": []any{}, "sys.query": "", "sys.user_id": "", "sys.files": []any{}, "sys.conversation_turns": float64(0), "env.k": "v", "plain": float64(1), "sys.unused": "keep"},
+			},
+			Sys:     map[string]any{"query": "q", "user_id": "u", "conversation_turns": float64(1), "files": []any{}, "history": []any{"user: q", "assistant: {'content': 'a'}"}, "date": "2026-01-01 00:00:00", "canvas_id": "c"},
+			Env:     map[string]any{"k": "v2"},
+			Globals: map[string]any{"begin@name": "n", "plain": float64(2), "stray": float64(3)},
+			History: []any{[]any{"user", "q"}, []any{"assistant", map[string]any{"content": "a"}}},
+			Memory:  []any{},
+		},
+		{
+			Name: "no globals in the run DSL",
+			RunDSL: map[string]any{"components": map[string]any{}},
+			Sys:     map[string]any{"query": "q", "conversation_turns": float64(2), "date": "d"},
+			Env:     map[string]any{},
+			Globals: map[string]any{"begin@x": []any{"a"}},
+			History: []any{[]any{"user", "q"}},
+			Memory:  []any{map[string]any{"user": "u", "assistant": "a", "summary": "s"}},
+		},
+	}
+	for i := range scenarios {
+		sc := &scenarios[i]
+		state := canvas.NewCanvasState("run", "sess")
+		for k, v := range sc.Sys {
+			state.Sys[k] = v
+		}
+		for k, v := range sc.Env {
+			state.Env[k] = v
+		}
+		for k, v := range sc.Globals {
+			state.Globals[k] = v
+		}
+		hist := make([]map[string]any, 0)
+		for _, h := range sc.History {
+			pair := h.([]any)
+			hist = append(hist, map[string]any{"role": pair[0], "content": "", "payload": pair[1]})
+		}
+		state.SetHistory(hist)
+		mem := make([]map[string]any, 0)
+		for _, m := range sc.Memory {
+			mem = append(mem, m.(map[string]any))
+		}
+		state.SetMemory(mem)
+		sc.Out = map[string]any(buildPersistedAgentDSL(sc.RunDSL, state))
+	}
+	fixtures["persisted"] = scenarios
+
+	b, err := json.MarshalIndent(fixtures, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

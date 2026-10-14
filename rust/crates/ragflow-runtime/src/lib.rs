@@ -18,10 +18,13 @@ pub use dsl::{Component as DslComponent, ComponentObj, Dsl};
 pub use event::{Event, EventSink};
 pub use graph::{CompileError, Graph, Node, SUPPORTED};
 pub use run::{
-    Bot, BuildError, Component, Deferred, Factory, NoDeferred, NodeCtx, Registry, RunError,
-    RunInput, RunOutcome,
+    Bot, BuildError, Component, Deferred, Factory, Finish, FinishHook, NoDeferred, NodeCtx, Opened,
+    Registry, RunError, RunInput, RunOutcome, SysIds,
 };
-pub use state::{Outputs, RunState};
+pub use state::{
+    decode_history, decode_memory, encode_history, encode_memory, history_content,
+    python_history_repr, render_user_history_value, Outputs, RunState,
+};
 
 /// A canvas that passed compilation.
 #[derive(Debug)]

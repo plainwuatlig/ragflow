@@ -35,6 +35,10 @@ fn run(source: Value, switch: Value, query: &str) -> Result<Vec<String>, RunErro
             .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
             .unwrap(),
         deadline: None,
+        ids: Default::default(),
+        user_input: None,
+        cancel: None,
+        finish: None,
     };
     bot.run(input, &mut events)?;
     Ok(events

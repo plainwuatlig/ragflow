@@ -33,6 +33,9 @@ pub struct Categorize {
     sys_prompt: String,
     default_category: String,
     query_ref: String,
+    /// `message_history_window_size`: how many history entries (the current
+    /// turn included) the "Real Data" prompt lists.
+    history_window: i64,
 }
 
 pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component>, String> {
@@ -139,6 +142,11 @@ pub fn factory(node: &Node, models: Arc<dyn Models>) -> Result<Box<dyn Component
             .to_string(),
         default_category,
         query_ref: string_from(&p, "query").unwrap_or_default().to_string(),
+        // categorize.go: defaults to 1; intFrom truncates a JSON number.
+        history_window: p
+            .get("message_history_window_size")
+            .and_then(Value::as_f64)
+            .map_or(1, |v| v as i64),
     }))
 }
 
@@ -223,10 +231,38 @@ impl Categorize {
         b
     }
 
-    /// With no session history the window holds only the current query.
-    pub fn user_prompt(query: &str) -> String {
-        let content = query.replace("\r\n", "").replace(['\n', '\r'], "");
-        format!("\n---- Real Data ----\nUSER: {} ->\n", go_quote(&content))
+    /// `buildCategorizePrompt(categorizeHistory(...))`: the last `window`
+    /// history entries (the current turn is the last one), each as
+    /// `ROLE: "content"`, joined by ` | `; the last entry's content is the
+    /// resolved query. With no usable history the window is the query alone.
+    pub fn user_prompt(history: &[Map<String, Value>], window: i64, query: &str) -> String {
+        let mut turns: Vec<(String, String)> = Vec::new();
+        if window > 0 {
+            let start = history.len().saturating_sub(window as usize);
+            for entry in &history[start..] {
+                let role = string_from(entry, "role").unwrap_or_default();
+                let content = string_from(entry, "content").unwrap_or_default();
+                if !role.is_empty() && !content.is_empty() {
+                    turns.push((role.to_string(), content.to_string()));
+                }
+            }
+        }
+        if turns.is_empty() {
+            turns.push(("user".into(), String::new()));
+        }
+        if let Some(last) = turns.last_mut() {
+            last.1 = query.to_string();
+        }
+        let parts: Vec<String> = turns
+            .iter()
+            .map(|(role, content)| {
+                let role = role.trim().to_uppercase();
+                let role = if role.is_empty() { "USER".into() } else { role };
+                let content = content.replace("\r\n", "").replace(['\n', '\r'], "");
+                format!("{role}: {}", go_quote(&content))
+            })
+            .collect();
+        format!("\n---- Real Data ----\n{} ->\n", parts.join(" | "))
     }
 
     fn pick(&self, response: &str, default_category: &str) -> String {
@@ -292,6 +328,11 @@ impl Component for Categorize {
                     .unwrap_or_default(),
             },
         };
+        // mergeCategorizeParam: the upstream's window overrides the param.
+        let window = inputs
+            .get("message_history_window_size")
+            .and_then(Value::as_f64)
+            .map_or(self.history_window, |v| v as i64);
         let messages = [
             ChatMessage {
                 role: "system",
@@ -299,7 +340,7 @@ impl Component for Categorize {
             },
             ChatMessage {
                 role: "user",
-                content: Self::user_prompt(&query),
+                content: Self::user_prompt(&ctx.state.history, window, &query),
             },
         ];
         let answer = self
