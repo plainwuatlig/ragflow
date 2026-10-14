@@ -1,7 +1,7 @@
 //! Begin: puts the visitor's query into `sys.query` and fills the canvas's
 //! declared input fields.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::graph::Node;
 use crate::run::{Component, NodeCtx};
@@ -37,9 +37,9 @@ impl Component for Begin {
             }
         }
 
-        let mut out = Outputs::new();
-        out.insert("query".into(), query.clone());
-        let mut declared = Map::new();
+        // Upstream passes its inputs through (begin.go `mapsCopy`) and adds
+        // only the declared fields; there is no `inputs` output.
+        let mut out = ctx.inputs.clone();
         for field in &self.fields {
             let cache = format!("begin@{field}");
             let value = ctx
@@ -54,11 +54,9 @@ impl Component for Begin {
                     .globals
                     .entry(cache)
                     .or_insert_with(|| value.clone());
-                declared.insert(field.clone(), value.clone());
                 out.insert(field.clone(), value);
             }
         }
-        out.insert("inputs".into(), Value::Object(declared));
         Ok(out)
     }
 }
