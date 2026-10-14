@@ -21,6 +21,8 @@ What it compares, per run of `run.sh`:
 * **Authentication.** A matrix of good and bad tokens (expired, from the future, wrong secret, superuser, API token
   spellings, beta token on a standard endpoint, cookie fallback) answers alike.
 * **Cancellation.** A slow run on one server is cancelled through the other, both ways and within one server.
+* **Failures.** A model that answers HTTP 500 to the classifier or to the answering Agent, and a dataset the caller may
+  not use: the event kinds, the text shown, the message rows and the `errors` column must be equal.
 * **Team access and the beta binding.** An invited-but-not-accepted member is refused by both; a normal member runs
   the canvas but not another member's session. A beta token bound to another agent is refused by ragflow-server and
   run by upstream (a ruled difference).
@@ -62,4 +64,9 @@ mean to. The plan for a real agent holds that agent's questions, so keep it out 
 * A deferred Agent's `node_finished` outputs, and the consuming Message's `inputs`: upstream reports the unopened
   stream (`{"content": {"Open": null}}`), ragflow-server the real answer.
 * A beta token bound to one agent cannot run another through `/agentbots/{id}/completions`.
-* `files` in a request are refused by ragflow-server.
+* A storage failure on the agentbot endpoints: upstream's reply carries the cause (table and SQL error), ragflow-server's
+  is generic. Deliberate: the cause is internal detail. The harness renames a table away on the copy to provoke it.
+* `files` in a request are refused by ragflow-server (v1 scope).
+
+Run failures (a failing classifier or answering model, a refused dataset) must read the same on both, in the stream and
+in the stored rows; those checks are plain PASS, not known.

@@ -152,7 +152,7 @@ fn numeric_comparison_on_text_fails_the_run() {
     )
     .unwrap_err();
     assert!(
-        matches!(err, RunError::Component { ref id, ref message } if id == "Switch:s" && message.contains("requires numeric operands")),
+        matches!(err, RunError::Component { ref id, ref message, .. } if id == "Switch:s" && message.contains("requires numeric operands")),
         "{err:?}"
     );
     assert_eq!(

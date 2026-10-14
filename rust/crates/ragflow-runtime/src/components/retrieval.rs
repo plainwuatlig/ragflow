@@ -8,6 +8,9 @@
 //! resolution, `formalized_content`, the chunk envelope, citation references).
 //! Memory retrieval and GraphRAG are not supported.
 
+/// How a refused dataset dependency check begins (`universe_a_wrappers.go`).
+pub const DEPENDENCY_ERROR: &str = "agent Retrieval dependency permission:";
+
 use std::sync::{Arc, OnceLock};
 
 use regex::Regex;
@@ -337,15 +340,32 @@ impl Component for Retrieval {
             }
         }
         let envelope = invoke_tool(self.service.as_ref(), &Value::Object(merged), ctx.state)
-            .map_err(|e| format!("canvas: Retrieval: {e}"))?;
-        let mut decoded = envelope;
-        if let Some(chunks) = decoded.get("chunks").cloned() {
-            if !decoded.contains_key("json") {
-                decoded.insert("json".into(), chunks);
-            }
-        }
+            .map_err(|e| {
+                // Upstream checks the datasets first and reports that
+                // failure as is; a failed search is `agent: Retrieval: ...`.
+                if e.starts_with(DEPENDENCY_ERROR) {
+                    e
+                } else {
+                    format!("agent: Retrieval: {e}")
+                }
+            })?;
+        let decoded = normalize_outputs(envelope);
         Ok(decoded)
     }
+}
+
+/// `normalizeRetrievalOutputs`: an empty result still has the arrays a
+/// downstream reference iterates over.
+fn normalize_outputs(mut decoded: Map<String, Value>) -> Map<String, Value> {
+    let chunks = match decoded.get("chunks") {
+        None | Some(Value::Null) => json!([]),
+        Some(c) => c.clone(),
+    };
+    decoded.insert("chunks".into(), chunks.clone());
+    if matches!(decoded.get("json"), None | Some(Value::Null)) {
+        decoded.insert("json".into(), chunks);
+    }
+    decoded
 }
 
 /// `retrievalArgs` after JSON decoding (Go `json.Unmarshal` type rules).
@@ -858,6 +878,27 @@ mod tests {
         let refs = retrieval_reference(&state).unwrap();
         assert_eq!(refs["total"], json!(2));
         assert_eq!(refs["doc_aggs"][0]["count"], json!(2));
+    }
+
+    #[test]
+    fn an_empty_result_keeps_its_arrays() {
+        let out = normalize_outputs(
+            json!({"formalized_content": "x"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        assert_eq!(
+            Value::Object(out),
+            json!({"formalized_content": "x", "chunks": [], "json": []})
+        );
+        let kept = normalize_outputs(
+            json!({"chunks": [{"a": 1}], "json": null})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        assert_eq!(kept["json"], json!([{"a": 1}]));
     }
 
     #[test]

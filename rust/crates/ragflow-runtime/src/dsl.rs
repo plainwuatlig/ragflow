@@ -14,6 +14,10 @@ pub struct Dsl {
     pub components: BTreeMap<String, Component>,
     #[serde(default)]
     pub globals: BTreeMap<String, Value>,
+    /// The editor's graph; only the nodes' display names are read (they
+    /// name a component in its run errors).
+    #[serde(default)]
+    pub graph: Value,
     /// The conversation a session DSL carries: `[[role, payload], ...]`.
     #[serde(default)]
     pub history: Value,
@@ -92,5 +96,23 @@ impl From<RawComponent> for Component {
             downstream,
             upstream: strings(raw.upstream),
         }
+    }
+}
+
+impl Dsl {
+    /// A component's name in run errors: its node's `data.name` when that
+    /// is not blank, else its id (`decodeCanvas`, `realComponentBody`).
+    pub fn display_name(&self, id: &str) -> String {
+        self.graph
+            .get("nodes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|n| n.get("id").and_then(Value::as_str) == Some(id))
+            .filter_map(|n| n.pointer("/data/name").and_then(Value::as_str))
+            .map(str::trim)
+            .find(|n| !n.is_empty())
+            .unwrap_or(id)
+            .to_string()
     }
 }

@@ -259,8 +259,16 @@ pub enum BuildError {
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum RunError {
-    #[error("canvas: component {id:?} invoke: {message}")]
-    Component { id: String, message: String },
+    /// Upstream's `NodeRunError` for a component that failed; `Display` is
+    /// the raw text the session's `errors` keeps, and
+    /// [`RunError::stream_text`] the text the stream shows.
+    #[error("[NodeRunError] agent: component {} invoke: {class}: {message}{NODE_PATH_SEPARATOR}node path: [{id}]", go_quote(.label))]
+    Component {
+        id: String,
+        label: String,
+        class: String,
+        message: String,
+    },
     /// The run's cancel flag was raised; no event is emitted for it.
     #[error("context canceled")]
     Cancelled,
@@ -272,8 +280,51 @@ pub enum RunError {
     /// No terminal component ran: upstream's workflow runs out of tasks
     /// before END (eino `no tasks to execute`), and the service rewrites
     /// the error for a Switch (`canvasInvokeError`, service/agent.go).
-    #[error("{message}")]
+    #[error("[GraphRunError] no tasks to execute, last completed nodes: [{last}]")]
     NoTerminal { last: String, message: String },
+}
+
+/// The decoration eino puts before a node path, which the stream replaces
+/// with a blank line (`MarkdownSafeErrorText`).
+pub const NODE_PATH_SEPARATOR: &str = "\n------------------------\n";
+
+impl RunError {
+    /// The text of the stream's `error` event (`canvasInvokeError`).
+    pub fn stream_text(&self) -> String {
+        match self {
+            RunError::NoTerminal { message, .. } => message.clone(),
+            RunError::Component { .. } => format!(
+                "agent invoke: {}",
+                self.to_string().replace(NODE_PATH_SEPARATOR, "\n\n")
+            ),
+            other => other.to_string(),
+        }
+    }
+}
+
+/// Go's `%q` for a string.
+pub fn go_quote(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\x07' => out.push_str("\\a"),
+            '\x08' => out.push_str("\\b"),
+            '\x0c' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\x0b' => out.push_str("\\v"),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32))
+            }
+            c if c.is_control() => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// The identities the service puts into `sys.*` before a run
@@ -340,7 +391,8 @@ pub struct RunOutcome {
     pub answer: Outputs,
     pub state: RunState,
     /// A deferred Agent failed and its error text was shown as the reply
-    /// (upstream ends such a run without `workflow_finished`).
+    /// (upstream ends such a run without `workflow_finished`). This is the
+    /// Message node's error as the session's `errors` keeps it.
     pub deferred_failure: Option<String>,
 }
 
@@ -571,21 +623,30 @@ impl Bot {
                         if shown {
                             events.emit(Event::MessageEnd { reference });
                         }
+                        // What the session's `errors` keeps is the node's error.
+                        let raw = RunError::Component {
+                            id: id.clone(),
+                            label: node.label.clone(),
+                            class: node.name.to_string(),
+                            message: format!("Message: consume deferred Agent stream: {failure}"),
+                        };
                         return Ok(RunOutcome {
                             answer,
                             state,
-                            deferred_failure: Some(failure),
+                            deferred_failure: Some(raw.to_string()),
                         });
                     }
                     let err = RunError::Component {
                         id: id.clone(),
+                        label: node.label.clone(),
+                        class: node.name.to_string(),
                         message,
                     };
                     // The service completes leftover deferred Agents before
                     // it reports the error.
                     deferred.flush(&mut events);
                     events.emit(Event::Error {
-                        message: err.to_string(),
+                        message: err.stream_text(),
                     });
                     return Err(err);
                 }

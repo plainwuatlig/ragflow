@@ -146,6 +146,7 @@ impl ServerModels {
             .ok_or_else(|| "no base URL configured for region \"\"".to_string())?;
         let suffix = provider.url_suffix["chat"].trim_start_matches('/');
         let url = format!("{root}/{suffix}");
+        let model_name = creds.model.clone();
         let request = Request {
             url,
             api_key: creds.api_key,
@@ -178,7 +179,9 @@ impl ServerModels {
                     }
                 }
                 Ok(Msg::Done(result)) => {
-                    let (text, usage) = result?;
+                    // The model client leads a driver's failure with the
+                    // model's name (`EinoChatModel`'s `"%s: %w"`).
+                    let (text, usage) = result.map_err(|e| format!("{model_name}: {e}"))?;
                     let mut total = self.usage.lock().expect("usage lock");
                     total.calls += 1;
                     total.prompt_tokens += usage.0;
@@ -307,10 +310,15 @@ impl Request {
         let resp = match req.send_string(&self.body.to_string()) {
             Ok(r) => r,
             Err(ureq::Error::Status(code, r)) => {
-                let body = r.into_string().unwrap_or_default();
-                return Err(format!("chat API error: status {code}, body: {body}"));
+                return Err(status_error(code, r));
             }
-            Err(e) => return Err(format!("failed to send request: {e}")),
+            Err(e) => {
+                return Err(format!(
+                    "failed to send request: Post {:?}: {}",
+                    self.url,
+                    transport_cause(&e)
+                ))
+            }
         };
         match (self.wire, self.stream) {
             (Wire::OpenAi, false) => {
@@ -339,6 +347,38 @@ impl Request {
             }
             (Wire::Ollama, true) => read_ollama_stream(resp, on_delta),
         }
+    }
+}
+
+/// The cap on a provider's error page (`maxModelErrorBodyBytes`).
+const ERROR_BODY_LIMIT: u64 = 1 << 20;
+
+/// The driver's `API request failed with status %d: %s`.
+fn status_error(code: u16, response: ureq::Response) -> String {
+    use std::io::Read;
+    let mut body = Vec::new();
+    let read = response
+        .into_reader()
+        .take(ERROR_BODY_LIMIT + 1)
+        .read_to_end(&mut body);
+    match read {
+        Err(e) => format!("API request failed with status {code}; failed to read error response: {e}"),
+        Ok(_) if body.len() as u64 > ERROR_BODY_LIMIT => format!(
+            "API request failed with status {code}; failed to read error response: response body exceeds {ERROR_BODY_LIMIT} bytes"
+        ),
+        Ok(_) => format!(
+            "API request failed with status {code}: {}",
+            String::from_utf8_lossy(&body)
+        ),
+    }
+}
+
+/// What Go's `url.Error` carries after the URL; the text of a transport
+/// failure differs in detail between the two stacks.
+fn transport_cause(e: &ureq::Error) -> String {
+    match e {
+        ureq::Error::Transport(t) => t.to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -677,5 +717,20 @@ mod tests {
         assert_eq!(base_url(p, "http://x/", "").unwrap(), "http://x");
         assert_eq!(base_url(p, "", "").unwrap(), "https://api.example/v1");
         assert_eq!(base_url(p, "", "eu"), None);
+    }
+
+    #[test]
+    fn a_status_error_reads_like_the_go_driver() {
+        let r = ureq::Response::new(500, "Internal Server Error", "{\"error\": \"boom\"}").unwrap();
+        assert_eq!(
+            status_error(500, r),
+            "API request failed with status 500: {\"error\": \"boom\"}"
+        );
+        let big = "x".repeat((ERROR_BODY_LIMIT + 1) as usize);
+        let r = ureq::Response::new(502, "Bad Gateway", &big).unwrap();
+        assert_eq!(
+            status_error(502, r),
+            "API request failed with status 502; failed to read error response: response body exceeds 1048576 bytes"
+        );
     }
 }

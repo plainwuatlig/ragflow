@@ -65,9 +65,32 @@ parent row locked `FOR UPDATE`, positions as upstream computes them, the snapsho
 Kvrocks run lease with its Lua scripts. It runs the canvases of the components `ragflow-runtime` implements (`SUPPORTED`)
 and says so, before writing anything, when a canvas has others.
 
-Not served: `files` in a request (refused), the OpenAI-compatible mode, dataflow canvases, uploads and attachments, the
-admin heartbeat and licence gate, and the `agent:run:*` run records that only UserFillUp resumption reads. Chat is spoken
-to OpenAI-compatible endpoints and Ollama; hosted-provider addresses must be publicly routable, as upstream requires.
+### v1 scope
+
+Not served in v1:
+
+* `files` in a request (refused with a clear error: file inputs need RAGFlow's document parsers).
+* The OpenAI-compatible agent endpoint (`openai-compatible` requests are refused). It comes later, together with chat
+  assistants and search.
+* Canvases with components the runtime lacks (anything but Begin, Categorize, Retrieval, Switch, Agent, Message;
+  dataflow canvases included): refused before anything is written.
+* Chat providers other than OpenAI-compatible endpoints and Ollama: a run that needs another provider fails naming it.
+  More providers come in a later ticket. Hosted-provider addresses must be publicly routable, as upstream requires.
+* Uploads and attachments, the admin heartbeat and licence gate, and the `agent:run:*` records that only UserFillUp
+  resumption reads.
+
+### Deliberate differences from upstream's Go server
+
+| difference | upstream | here | why |
+|---|---|---|---|
+| beta token bound to another agent on `/agentbots/{id}/completions` | runs it | refused: `API token is not authorized for this agent.` | a bound token should run only its agent |
+| storage failure on the agentbot endpoints | the error text carries the storage cause (table, SQL error) | `Internal storage error while accessing the agent.` | the cause is internal detail |
+| a deferred Agent's `node_finished` outputs and its Message's inputs | the unopened stream (`{"content": {"Open": null}}`) | the real answer | upstream's value is an artefact |
+| `files`, OpenAI-compatible mode | served | refused | v1 scope, above |
+
+Run failures are worded as upstream words them (`agent invoke: [NodeRunError] agent: component "<name>" invoke: ...`,
+`**ERROR**: [GraphRunError] ...`), in the stream and in the stored message and `errors` rows. Transport failures
+(connection refused, timeouts) carry the Rust HTTP stack's description after upstream's `failed to send request: Post "<url>":`.
 
     cd rust && cargo test                                   # unit and in-memory tests
     docker build -f rust/docker/server.Dockerfile --build-context upstream=/tmp/upstream -t ragflow-server .
