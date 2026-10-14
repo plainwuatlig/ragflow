@@ -22,3 +22,20 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+  parity:
+    # Go oracle vs Rust runtime on rust/parity/corpus (see rust/parity/README.md).
+    # Cold: ~55 s wall / ~270 s CPU to build oracle-go on a 10-core Mac;
+    # estimated 3-4 min on a hosted runner, less with the module/build cache.
+    if: github.repository != 'infiniflow/ragflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.2"
+          cache-dependency-path: go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rust/parity/run.sh
