@@ -111,16 +111,18 @@ impl Component for Message {
                     out.push_str(literal);
                 }
                 if let Some(agent) = deferred_agent(ctx, reference) {
-                    let outputs = ctx
+                    let opened = ctx
                         .deferred
                         .open(agent, ctx.state, ctx.events)
                         .map_err(|e| format!("Message: consume deferred Agent stream: {e}"))?;
-                    let answer = outputs
+                    let answer = opened
+                        .outputs
                         .get("content")
                         .and_then(Value::as_str)
                         .unwrap_or_default()
                         .to_string();
-                    if !answer.is_empty() {
+                    // An Agent that streamed has already said its answer.
+                    if !answer.is_empty() && !opened.streamed {
                         ctx.events.emit(Event::Message {
                             content: answer.clone(),
                         });

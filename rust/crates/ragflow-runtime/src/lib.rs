@@ -18,7 +18,7 @@ pub use dsl::{Component as DslComponent, ComponentObj, Dsl};
 pub use event::{Event, EventSink};
 pub use graph::{CompileError, Graph, Node, SUPPORTED};
 pub use run::{
-    Bot, BuildError, Component, Deferred, Factory, Finish, FinishHook, NoDeferred, NodeCtx,
+    Bot, BuildError, Component, Deferred, Factory, Finish, FinishHook, NoDeferred, NodeCtx, Opened,
     Registry, RunError, RunInput, RunOutcome, SysIds,
 };
 pub use state::{

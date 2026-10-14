@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
 
+use crate::event::Event;
 use crate::graph::Node;
 use crate::models::{ChatMessage, ChatOptions, ModelRef, Models};
 use crate::run::{Component, NodeCtx};
@@ -317,9 +318,26 @@ impl Component for Agent {
             role: "user",
             content: user,
         });
-        let content = self
-            .models
-            .chat_for(&self.id, &model, &messages, &p.options())?;
+        let content = if ctx.stream_messages {
+            // A Message is running this Agent in place: the answer goes out
+            // as it arrives, before the Agent's node finishes.
+            ctx.streamed = true;
+            let events = &mut *ctx.events;
+            self.models.chat_stream_for(
+                &self.id,
+                &model,
+                &messages,
+                &p.options(),
+                &mut |delta| {
+                    events.emit(Event::Message {
+                        content: delta.to_string(),
+                    })
+                },
+            )?
+        } else {
+            self.models
+                .chat_for(&self.id, &model, &messages, &p.options())?
+        };
 
         let mut out = Outputs::new();
         out.insert("content".into(), json!(content));

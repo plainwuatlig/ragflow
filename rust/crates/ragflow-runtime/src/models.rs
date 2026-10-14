@@ -73,6 +73,23 @@ pub trait Models: Send + Sync {
 
     fn embed(&self, model: &ModelRef, texts: &[String]) -> Result<Vec<Vec<f32>>, String>;
 
+    /// `chat_for` that hands each piece of the reply to `on_delta` as the
+    /// model produces it. The default delivers the whole reply at once.
+    fn chat_stream_for(
+        &self,
+        component_id: &str,
+        model: &ModelRef,
+        messages: &[ChatMessage],
+        options: &ChatOptions,
+        on_delta: &mut dyn FnMut(&str),
+    ) -> Result<String, String> {
+        let reply = self.chat_for(component_id, model, messages, options)?;
+        if !reply.is_empty() {
+            on_delta(&reply);
+        }
+        Ok(reply)
+    }
+
     /// `chat` on behalf of a named component. A deferred Agent makes its
     /// call while the consuming Message runs, so the caller cannot be
     /// inferred from the event stream; implementations that care (the

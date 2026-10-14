@@ -42,6 +42,12 @@ pub struct NodeCtx<'a> {
     pub events: &'a mut dyn EventSink,
     /// Deferred Agents waiting for a Message to run them.
     pub deferred: &'a mut dyn Deferred,
+    /// Set while a Message runs this Agent in place: the Agent streams its
+    /// answer as `message` events as the model produces it.
+    pub stream_messages: bool,
+    /// Set by an Agent that streamed its answer, so the Message does not
+    /// say it again.
+    pub streamed: bool,
 }
 
 pub trait Component: Send + Sync {
@@ -59,7 +65,14 @@ pub trait Deferred {
         id: &str,
         state: &mut RunState,
         events: &mut dyn EventSink,
-    ) -> Result<Outputs, String>;
+    ) -> Result<Opened, String>;
+}
+
+/// A deferred Agent that has run.
+pub struct Opened {
+    pub outputs: Outputs,
+    /// Its answer was already emitted as `message` events while it arrived.
+    pub streamed: bool,
 }
 
 /// No deferred Agents (what a deferred Agent itself sees).
@@ -74,7 +87,7 @@ impl Deferred for NoDeferred {
         id: &str,
         _: &mut RunState,
         _: &mut dyn EventSink,
-    ) -> Result<Outputs, String> {
+    ) -> Result<Opened, String> {
         Err(format!("{id} is not a deferred Agent"))
     }
 }
@@ -102,12 +115,13 @@ impl Deferred for DeferredAgents<'_> {
         id: &str,
         state: &mut RunState,
         events: &mut dyn EventSink,
-    ) -> Result<Outputs, String> {
+    ) -> Result<Opened, String> {
         let Some(pending) = self.pending.get(id) else {
             return Err(format!("{id} is not a pending deferred Agent"));
         };
         let (inputs, started) = (pending.inputs.clone(), pending.started);
         let node = &self.graph.nodes[id];
+        let streamed;
         let result = {
             let mut ctx = NodeCtx {
                 node,
@@ -115,8 +129,12 @@ impl Deferred for DeferredAgents<'_> {
                 state: &mut *state,
                 events: &mut *events,
                 deferred: &mut NoDeferred,
+                stream_messages: true,
+                streamed: false,
             };
-            self.components[id].invoke(&mut ctx)
+            let r = self.components[id].invoke(&mut ctx);
+            streamed = ctx.streamed;
+            r
         };
         match result {
             Err(e) => {
@@ -137,7 +155,10 @@ impl Deferred for DeferredAgents<'_> {
                     elapsed_time: started.elapsed().as_secs_f64(),
                     created_at: unix_now(),
                 });
-                Ok(kept)
+                Ok(Opened {
+                    outputs: kept,
+                    streamed,
+                })
             }
         }
     }
@@ -511,6 +532,8 @@ impl Bot {
                     state: &mut state,
                     events: &mut events,
                     deferred: &mut deferred,
+                    stream_messages: false,
+                    streamed: false,
                 };
                 self.components[id].invoke(&mut ctx)
             };

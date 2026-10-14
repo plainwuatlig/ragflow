@@ -164,6 +164,70 @@ fn a_fresh_session_lists_only_the_query() {
     assert_eq!(agent.1.len(), 2, "system + current prompt only");
 }
 
+/// Streams "ab" then "cd" as deltas.
+struct Streamer;
+impl Models for Streamer {
+    fn chat(&self, _: &ModelRef, _: &[ChatMessage], _: &ChatOptions) -> Result<String, String> {
+        Ok("abcd".into())
+    }
+    fn chat_stream_for(
+        &self,
+        _: &str,
+        _: &ModelRef,
+        _: &[ChatMessage],
+        _: &ChatOptions,
+        on_delta: &mut dyn FnMut(&str),
+    ) -> Result<String, String> {
+        on_delta("ab");
+        on_delta("cd");
+        Ok("abcd".into())
+    }
+    fn embed(&self, _: &ModelRef, _: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        Err("no".into())
+    }
+}
+
+#[test]
+fn a_deferred_agent_streams_before_it_finishes_and_the_message_does_not_repeat_it() {
+    let dsl = json!({"components": {
+        "begin": node("Begin", json!({}), &[], &["Agent:a"]),
+        "Agent:a": node("Agent", json!({"llm_id": "m@Prov", "prompts": [{"role": "user", "content": "{sys.query}"}]}),
+            &["begin"], &["Message:m"]),
+        "Message:m": node("Message", json!({"content": ["<{Agent:a@content}>"]}), &["Agent:a"], &[]),
+    }});
+    let bot = Bot::new(
+        compile(&dsl.to_string()).unwrap(),
+        &Registry::with_models(Arc::new(Streamer)),
+    )
+    .unwrap();
+    let input = RunInput::new(
+        "q",
+        FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .unwrap(),
+    );
+    let mut events = Vec::new();
+    bot.run(input, &mut events).unwrap();
+    let shape: Vec<String> = events
+        .iter()
+        .map(|e| match e {
+            Event::Message { content } => format!("message:{content}"),
+            Event::NodeFinished { component_id, .. } => format!("finished:{component_id}"),
+            other => other.name().to_string(),
+        })
+        .collect();
+    let at = |what: &str| shape.iter().position(|s| s == what).unwrap();
+    assert!(at("message:<") < at("message:ab") && at("message:ab") < at("message:cd"));
+    assert!(at("message:cd") < at("finished:Agent:a"), "{shape:?}");
+    assert!(at("finished:Agent:a") < at("message:>"), "{shape:?}");
+    let text: String = shape
+        .iter()
+        .filter_map(|s| s.strip_prefix("message:"))
+        .collect();
+    assert_eq!(text, "<abcd>", "the answer is said once");
+}
+
 struct Names(Arc<Mutex<Vec<String>>>);
 impl EventSink for Names {
     fn emit(&mut self, e: Event) {
