@@ -1,0 +1,399 @@
+{
+  "names": [
+    {
+      "input": null,
+      "name": ""
+    },
+    {
+      "input": "hello",
+      "name": "hello"
+    },
+    {
+      "input": {
+        "query": "q",
+        "x": 1
+      },
+      "name": "q"
+    },
+    {
+      "input": {
+        "question": "w"
+      },
+      "name": "w"
+    },
+    {
+      "input": {
+        "a": 1
+      },
+      "name": "{\"a\":1}"
+    },
+    {
+      "input": {},
+      "name": ""
+    },
+    {
+      "input": {
+        "query": ""
+      },
+      "name": "{\"query\":\"\"}"
+    },
+    {
+      "input": 5,
+      "name": "5"
+    },
+    {
+      "input": "令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令",
+      "name": "令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令令"
+    }
+  ],
+  "normalize": [
+    {
+      "input": {
+        "components": {
+          "Message:a": {
+            "obj": {
+              "component_name": "Message",
+              "params": {
+                "content": [
+                  "x {IterationItem:Foo@item} {IterationItem:Foo@index} {IterationItem:Foo@items}"
+                ]
+              }
+            }
+          }
+        },
+        "graph": {
+          "edges": [
+            {
+              "sourceHandle": "end",
+              "targetHandle": "start"
+            },
+            {
+              "sourceHandle": "agentBottom",
+              "targetHandle": "end"
+            },
+            {
+              "id": "e3"
+            }
+          ],
+          "nodes": []
+        }
+      },
+      "normalized": {
+        "components": {
+          "Message:a": {
+            "downstream": null,
+            "id": "Message:a",
+            "name": "Message",
+            "params": {
+              "content": [
+                "x {item} {index} {IterationItem:Foo@items}"
+              ]
+            },
+            "upstream": null
+          }
+        },
+        "graph": {
+          "edges": [],
+          "nodes": [
+            {
+              "data": {
+                "form": {
+                  "content": [
+                    "x {item} {index} {IterationItem:Foo@items}"
+                  ]
+                },
+                "label": "Message",
+                "name": "Message"
+              },
+              "id": "Message:a",
+              "position": {
+                "x": 50,
+                "y": 200
+              },
+              "sourcePosition": "right",
+              "targetPosition": "left",
+              "type": "messageNode"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "persisted": [
+    {
+      "name": "first turn",
+      "run_dsl": {
+        "components": {
+          "begin": {}
+        },
+        "globals": {
+          "env.k": "v",
+          "plain": 1,
+          "sys.conversation_turns": 0,
+          "sys.files": [],
+          "sys.history": [],
+          "sys.query": "",
+          "sys.unused": "keep",
+          "sys.user_id": ""
+        },
+        "history": [],
+        "memory": [],
+        "path": []
+      },
+      "sys": {
+        "canvas_id": "c",
+        "conversation_turns": 1,
+        "date": "2026-01-01 00:00:00",
+        "files": [],
+        "history": [
+          "user: q",
+          "assistant: {'content': 'a'}"
+        ],
+        "query": "q",
+        "user_id": "u"
+      },
+      "env": {
+        "k": "v2"
+      },
+      "globals": {
+        "begin@name": "n",
+        "plain": 2,
+        "stray": 3
+      },
+      "history": [
+        [
+          "user",
+          "q"
+        ],
+        [
+          "assistant",
+          {
+            "content": "a"
+          }
+        ]
+      ],
+      "memory": [],
+      "persisted": {
+        "components": {
+          "begin": {}
+        },
+        "globals": {
+          "begin@name": "n",
+          "env.k": "v2",
+          "plain": 2,
+          "sys.conversation_turns": 1,
+          "sys.date": "2026-01-01 00:00:00",
+          "sys.files": [],
+          "sys.history": [
+            "user: q",
+            "assistant: {'content': 'a'}"
+          ],
+          "sys.query": "q",
+          "sys.unused": "keep",
+          "sys.user_id": "u"
+        },
+        "history": [
+          [
+            "user",
+            "q"
+          ],
+          [
+            "assistant",
+            {
+              "content": "a"
+            }
+          ]
+        ],
+        "memory": [],
+        "path": []
+      }
+    },
+    {
+      "name": "no globals in the run DSL",
+      "run_dsl": {
+        "components": {}
+      },
+      "sys": {
+        "conversation_turns": 2,
+        "date": "d",
+        "query": "q"
+      },
+      "env": {},
+      "globals": {
+        "begin@x": [
+          "a"
+        ]
+      },
+      "history": [
+        [
+          "user",
+          "q"
+        ]
+      ],
+      "memory": [
+        {
+          "assistant": "a",
+          "summary": "s",
+          "user": "u"
+        }
+      ],
+      "persisted": {
+        "components": {},
+        "globals": {
+          "begin@x": [
+            "a"
+          ],
+          "sys.conversation_turns": 2,
+          "sys.date": "d",
+          "sys.query": "q"
+        },
+        "history": [
+          [
+            "user",
+            "q"
+          ]
+        ],
+        "memory": [
+          [
+            "u",
+            "a",
+            "s"
+          ]
+        ]
+      }
+    }
+  ],
+  "repr": [
+    {
+      "input": null,
+      "repr": "None",
+      "user_history": "None"
+    },
+    {
+      "input": true,
+      "repr": "True",
+      "user_history": "True"
+    },
+    {
+      "input": false,
+      "repr": "False",
+      "user_history": "False"
+    },
+    {
+      "input": "plain",
+      "repr": "'plain'",
+      "user_history": "plain"
+    },
+    {
+      "input": "it's a \\ test\n\r\t",
+      "repr": "'it\\'s a \\\\ test\\n\\r\\t'",
+      "user_history": "it's a \\ test\n\r\t"
+    },
+    {
+      "input": 3,
+      "repr": "3",
+      "user_history": "3"
+    },
+    {
+      "input": 2.5,
+      "repr": "2.5",
+      "user_history": "2.5"
+    },
+    {
+      "input": 1e+21,
+      "repr": "1e+21",
+      "user_history": "1e+21"
+    },
+    {
+      "input": 1e-7,
+      "repr": "1e-07",
+      "user_history": "1e-07"
+    },
+    {
+      "input": {
+        "_created_time": "t",
+        "_elapsed_time": 0.5,
+        "b": 1,
+        "content": "a",
+        "downloads": [],
+        "extra": "x"
+      },
+      "repr": "{'content': 'a', 'downloads': [], 'b': 1, 'extra': 'x', '_created_time': 't', '_elapsed_time': 0.5}",
+      "user_history": "{\"_created_time\":\"t\",\"_elapsed_time\":0.5,\"b\":1,\"content\":\"a\",\"downloads\":[],\"extra\":\"x\"}"
+    },
+    {
+      "input": [
+        "a",
+        1,
+        null,
+        {
+          "k": "v"
+        }
+      ],
+      "repr": "['a', 1, None, {'k': 'v'}]",
+      "user_history": "['a', 1, None, {'k': 'v'}]"
+    },
+    {
+      "input": {},
+      "repr": "{}",
+      "user_history": "{}"
+    },
+    {
+      "input": [],
+      "repr": "[]",
+      "user_history": "[]"
+    }
+  ],
+  "reset": [
+    {
+      "input": {
+        "globals": {
+          "sys.history": [
+            "user: x"
+          ],
+          "sys.query": "x"
+        },
+        "history": [
+          [
+            "user",
+            "x"
+          ]
+        ],
+        "path": [
+          "a"
+        ]
+      },
+      "reset": {
+        "globals": {
+          "sys.history": [],
+          "sys.query": "x"
+        },
+        "history": [],
+        "path": []
+      }
+    },
+    {
+      "input": {},
+      "reset": {
+        "globals": {
+          "sys.history": []
+        },
+        "history": [],
+        "path": []
+      }
+    },
+    {
+      "input": {
+        "components": {}
+      },
+      "reset": {
+        "components": {},
+        "globals": {
+          "sys.history": []
+        },
+        "history": [],
+        "path": []
+      }
+    }
+  ]
+}
