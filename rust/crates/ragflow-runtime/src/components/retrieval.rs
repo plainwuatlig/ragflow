@@ -8,6 +8,9 @@
 //! resolution, `formalized_content`, the chunk envelope, citation references).
 //! Memory retrieval and GraphRAG are not supported.
 
+/// How a refused dataset dependency check begins (`universe_a_wrappers.go`).
+pub const DEPENDENCY_ERROR: &str = "agent Retrieval dependency permission:";
+
 use std::sync::{Arc, OnceLock};
 
 use regex::Regex;
@@ -337,7 +340,15 @@ impl Component for Retrieval {
             }
         }
         let envelope = invoke_tool(self.service.as_ref(), &Value::Object(merged), ctx.state)
-            .map_err(|e| format!("canvas: Retrieval: {e}"))?;
+            .map_err(|e| {
+                // Upstream checks the datasets first and reports that
+                // failure as is; a failed search is `agent: Retrieval: ...`.
+                if e.starts_with(DEPENDENCY_ERROR) {
+                    e
+                } else {
+                    format!("agent: Retrieval: {e}")
+                }
+            })?;
         let mut decoded = envelope;
         if let Some(chunks) = decoded.get("chunks").cloned() {
             if !decoded.contains_key("json") {

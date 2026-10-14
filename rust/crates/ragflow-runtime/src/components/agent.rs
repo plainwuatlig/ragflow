@@ -338,10 +338,12 @@ impl Component for Agent {
             // A cancelled call is the run's, not the Agent's, to report.
             Err(e) if e == crate::models::CANCELLED => return Err(e),
             // Upstream keeps a failed model call in the data flow as the
-            // `_ERROR` output; a Message running the Agent shows the same
-            // text as the reply.
+            // `_ERROR` output, worded as its ReAct graph words it; a
+            // Message running the Agent shows the same text as the reply.
             Err(e) => {
-                let text = format!("**ERROR**: {e}");
+                let text = format!(
+                    "**ERROR**: [GraphRunError] failed to calculate next tasks: calculate next step fail, node: chat, error: branch collect run error: {e}"
+                );
                 if ctx.stream_messages {
                     return Err(text);
                 }

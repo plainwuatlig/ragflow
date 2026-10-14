@@ -160,6 +160,10 @@ fn a_run_where_no_terminal_ran_fails_like_upstream() {
         .unwrap_err();
     assert_eq!(
         err.to_string(),
+        "[GraphRunError] no tasks to execute, last completed nodes: [Switch:r]"
+    );
+    assert_eq!(
+        err.stream_text(),
         "agent invoke: Switch routing stopped because no connected branch matched the condition; check the Switch branches"
     );
     assert_eq!(events.last().map(Event::name), Some("error"));
@@ -168,7 +172,7 @@ fn a_run_where_no_terminal_ran_fails_like_upstream() {
         .run(input("q"), &mut events)
         .unwrap_err();
     assert_eq!(
-        err.to_string(),
+        err.stream_text(),
         "agent invoke: [GraphRunError] no tasks to execute, last completed nodes: [router]"
     );
 }
@@ -214,7 +218,9 @@ fn a_failing_deferred_agent_becomes_the_reply_without_workflow_finished() {
     let out = b.run(input("q"), &mut events).unwrap();
     assert_eq!(
         out.deferred_failure.as_deref(),
-        Some(r#"component: invalid param "model_id": required"#)
+        Some(
+            "[NodeRunError] agent: component \"Message:m\" invoke: Message: Message: consume deferred Agent stream: component: invalid param \"model_id\": required\n------------------------\nnode path: [Message:m]"
+        )
     );
     let names: Vec<_> = events.iter().map(Event::name).collect();
     assert_eq!(
@@ -302,10 +308,21 @@ fn an_unresolved_reference_fails_the_run() {
         err,
         RunError::Component {
             id: "Message:m".into(),
+            label: "Message:m".into(),
+            class: "Message".into(),
             message: "Can't find variable: 'Agent:gone@content'".into()
         }
     );
     assert_eq!(events.last().map(Event::name), Some("error"));
+    // The stream shows upstream's NodeRunError with a blank line for eino's rule.
+    let shown = err.stream_text();
+    assert_eq!(
+        shown,
+        "agent invoke: [NodeRunError] agent: component \"Message:m\" invoke: Message: Can't find variable: 'Agent:gone@content'\n\nnode path: [Message:m]"
+    );
+    assert!(err
+        .to_string()
+        .contains("\n------------------------\nnode path: [Message:m]"));
 }
 
 #[test]
@@ -334,4 +351,26 @@ fn begin_fills_declared_fields_from_the_query() {
     let mut events = Vec::new();
     b.run(input("parking"), &mut events).unwrap();
     assert_eq!(messages(&events), ["parking"]);
+}
+
+#[test]
+fn a_failed_component_is_named_by_its_node_label_quoted_like_go() {
+    let b = bot(json!({
+        "graph": { "nodes": [
+            { "id": "Message:m", "data": { "name": "  回覆 \"1\"  " } }
+        ]},
+        "components": {
+            "begin": node("Begin", json!({}), &[], &["Message:m"]),
+            "Message:m": node("Message", json!({ "content": ["{Agent:gone@content}"] }), &["begin"], &[]),
+        }
+    }));
+    let mut events = Vec::new();
+    let err = b.run(input("q"), &mut events).unwrap_err();
+    assert!(
+        err.stream_text().starts_with(
+            "agent invoke: [NodeRunError] agent: component \"回覆 \\\"1\\\"\" invoke: Message:"
+        ),
+        "{}",
+        err.stream_text()
+    );
 }

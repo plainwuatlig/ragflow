@@ -46,6 +46,8 @@ pub enum CompileError {
 #[derive(Debug)]
 pub struct Node {
     pub id: String,
+    /// What run errors call the component (see [`Dsl::display_name`]).
+    pub label: String,
     /// The component name in this runtime's spelling (upstream matches
     /// names case-insensitively).
     pub name: &'static str,
@@ -112,6 +114,7 @@ pub fn build(dsl: &Dsl) -> Result<Graph, CompileError> {
             id.clone(),
             Node {
                 id: id.clone(),
+                label: dsl.display_name(id),
                 name,
                 params: c.obj.params.clone(),
                 upstream,
