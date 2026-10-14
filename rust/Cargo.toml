@@ -4,9 +4,11 @@ members = [
     "crates/ragflow-runtime",
     "crates/ragflow-parity",
     "crates/ragflow-analyzer",
+    "crates/ragflow-retrieval",
 ]
-# ragflow-analyzer links a C++ archive built in Docker (docker/analyzer.Dockerfile);
-# keep it out of a bare `cargo test` / `cargo clippy` on machines without it.
+# ragflow-analyzer (and ragflow-retrieval through it) links a C++ archive built
+# in Docker (docker/*.Dockerfile); keep them out of a bare `cargo test` /
+# `cargo clippy` on machines without it.
 default-members = ["crates/ragflow-runtime", "crates/ragflow-parity"]
 
 [workspace.package]
