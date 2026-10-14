@@ -1,0 +1,26 @@
+[package]
+name = "ragflow-retrieval"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "RAGFlow's agent Retrieval (v1.0.0-rc1 semantics) over Elasticsearch and MySQL"
+
+[features]
+# Live store clients (Elasticsearch over HTTP, MySQL, Ollama embeddings) and
+# the parity binary.
+live = ["dep:ureq", "dep:mysql"]
+
+[dependencies]
+ragflow-analyzer = { path = "../ragflow-analyzer" }
+ragflow-runtime = { path = "../ragflow-runtime" }
+regex.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+ureq = { version = "2", default-features = false, features = ["json"], optional = true }
+mysql = { version = "25", default-features = false, features = ["minimal"], optional = true }
+
+[[bin]]
+name = "ragflow-retrieval-parity"
+path = "src/bin/parity.rs"
+required-features = ["live"]

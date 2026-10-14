@@ -22,3 +22,24 @@ no upstream file is edited, so a rebase never conflicts:
 
     git fetch upstream
     git rebase upstream/main
+
+## ragflow-analyzer — upstream's C++ text analyzer over FFI
+
+`crates/ragflow-analyzer` binds `internal/binding/cpp` (the analyzer the Go server
+links through cgo) and ships a CLI that prints, per stdin line,
+`{"text", "tokens", "fine_grained"}`. The C++ archive is built by upstream's own
+`./build.sh --cpp` inside upstream's builder image, so the crate is not a default
+workspace member; build it with Docker (linux/amd64):
+
+    docker build -f rust/docker/analyzer.Dockerfile -t ragflow-analyzer .
+    echo '你好世界 Hello World' | docker run --rm -i ragflow-analyzer
+    docker run --rm -i ragflow-analyzer --mode index --language English --input jsonl < chunks.jsonl
+
+## ragflow-retrieval — the agent Retrieval over Elasticsearch
+
+`crates/ragflow-retrieval` reproduces upstream's Go retrieval at v1.0.0-rc1
+(query building, the ES request, the second KNN pass, scoring, pruning, the
+adapter) on top of `ragflow-analyzer`, and implements the runtime's
+`RetrievalService` for the `Retrieval` component. The `live` feature adds
+Elasticsearch/MySQL/Ollama clients. `retrieval-parity/` runs it against
+upstream's Go code on live stores; see its README.

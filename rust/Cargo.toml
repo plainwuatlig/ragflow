@@ -1,6 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["crates/ragflow-runtime", "crates/ragflow-parity"]
+members = [
+    "crates/ragflow-runtime",
+    "crates/ragflow-parity",
+    "crates/ragflow-analyzer",
+    "crates/ragflow-retrieval",
+]
+# ragflow-analyzer (and ragflow-retrieval through it) links a C++ archive built
+# in Docker (docker/*.Dockerfile); keep them out of a bare `cargo test` /
+# `cargo clippy` on machines without it.
+default-members = ["crates/ragflow-runtime", "crates/ragflow-parity"]
 
 [workspace.package]
 edition = "2021"
