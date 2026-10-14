@@ -11,6 +11,10 @@
 //! | `RAGFLOW_MODELS_DIR` | `conf/models` (upstream's provider catalog) |
 //! | `RAGFLOW_DICT_PATH` | `/usr/share/infinity/resource` (the analyzer's dictionaries) |
 //! | `RAGFLOW_LISTEN` | `0.0.0.0:9380` |
+//! | `RAGFLOW_RES_DIR` | unset (the analyzer's resource directory) |
+//!
+//! `ragflow-server healthcheck` probes `GET /healthz` on `RAGFLOW_LISTEN`'s port
+//! and exits 0 when the server answers (the image's `HEALTHCHECK`).
 
 use std::sync::Arc;
 
@@ -41,8 +45,52 @@ fn encode(s: &str) -> String {
         .collect()
 }
 
+/// `ragflow-server healthcheck`: GET /healthz on the local listen port.
+fn healthcheck() -> Result<(), String> {
+    use std::io::{Read, Write};
+    let listen = env("RAGFLOW_LISTEN", "0.0.0.0:9380");
+    let port = listen.rsplit(':').next().unwrap_or("9380");
+    let timeout = std::time::Duration::from_secs(3);
+    let addr: std::net::SocketAddr = format!("127.0.0.1:{port}")
+        .parse()
+        .map_err(|e| format!("{listen}: {e}"))?;
+    let mut conn =
+        std::net::TcpStream::connect_timeout(&addr, timeout).map_err(|e| e.to_string())?;
+    conn.set_read_timeout(Some(timeout))
+        .map_err(|e| e.to_string())?;
+    conn.write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .map_err(|e| e.to_string())?;
+    let mut head = String::new();
+    conn.take(64)
+        .read_to_string(&mut head)
+        .map_err(|e| e.to_string())?;
+    if head.starts_with("HTTP/1.1 200") {
+        Ok(())
+    } else {
+        Err(format!("unhealthy: {}", head.lines().next().unwrap_or("")))
+    }
+}
+
+/// Resolves on SIGTERM (`docker stop`) or Ctrl-C, so the server stops accepting
+/// and drains instead of waiting for the runtime's kill.
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate()).expect("a SIGTERM handler");
+    tokio::select! {
+        _ = term.recv() => {}
+        _ = tokio::signal::ctrl_c() => {}
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    if std::env::args().nth(1).as_deref() == Some("healthcheck") {
+        if let Err(e) = healthcheck() {
+            eprintln!("ragflow-server healthcheck: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(e) = run().await {
         eprintln!("ragflow-server: {e}");
         std::process::exit(1);
@@ -117,6 +165,7 @@ async fn run() -> Result<(), String> {
         .map_err(|e| format!("{listen}: {e}"))?;
     eprintln!("ragflow-server listening on {listen}");
     axum::serve(listener, router(app))
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| e.to_string())
 }
