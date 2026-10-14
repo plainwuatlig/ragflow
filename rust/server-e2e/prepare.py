@@ -32,11 +32,12 @@ def main():
     invited = {r["u"] for r in stack.rows(
         f"SELECT JSON_OBJECT('u', user_id) FROM user_tenant WHERE tenant_id='{owner_tenant}' AND role='invite' AND status='1'")}
     others = stack.rows(f"SELECT JSON_OBJECT('id', id) FROM `user` WHERE id<>'{owner_tenant}' AND is_superuser=0 ORDER BY id")
-    canvas2 = uuid.uuid4().hex
-    stack.sql(f"""DELETE FROM user_canvas WHERE id='{canvas2}';
-        CREATE TEMPORARY TABLE c2 SELECT * FROM user_canvas WHERE id='{canvas}';
-        UPDATE c2 SET id='{canvas2}', title='second agent', permission='team';
-        INSERT INTO user_canvas SELECT * FROM c2;""")
+    existing = stack.rows(f"SELECT JSON_OBJECT('id', id) FROM user_canvas WHERE user_id='{owner_tenant}' AND title='second agent'")
+    canvas2 = existing[0]["id"] if existing else uuid.uuid4().hex
+    if not existing:
+        stack.sql(f"""CREATE TEMPORARY TABLE c2 SELECT * FROM user_canvas WHERE id='{canvas}';
+            UPDATE c2 SET id='{canvas2}', title='second agent', permission='team';
+            INSERT INTO user_canvas SELECT * FROM c2;""")
     rows = [(owner_tenant, "ragflow-e2e-owner", None, None)]
     # An invited-but-not-accepted member and a stranger, when the copy has them.
     for label, wanted in (("invitee", True), ("outsider", False)):

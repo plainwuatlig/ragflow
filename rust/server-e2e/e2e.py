@@ -297,7 +297,7 @@ def main():
     ap.add_argument("--canvas", required=True)
     ap.add_argument("--probes", required=True, help="JSON: {conversations: [{name, turns: [{id, msg}]}], rules: [[substring, category]]}")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--only", default="", help="comma list of sections: probes,misc,auth,beta,team,cancel")
+    ap.add_argument("--only", default="", help="comma list of sections: probes,misc,failures,auth,beta,team,cancel")
     args = ap.parse_args()
     out = args.out or os.path.join(args.state, "out")
     os.makedirs(out, exist_ok=True)
@@ -315,6 +315,8 @@ def main():
         probes(stack, stub, plan, canvas, api, out)
     if want("misc"):
         misc(stack, stub, canvas, api, out)
+    if want("failures"):
+        failures(stack, stub, canvas, api, out)
     if want("auth"):
         auth_matrix(stack, secret, canvas, api)
     if want("beta"):
@@ -505,6 +507,61 @@ def misc(stack, stub, canvas, api, out):
     same("agentbot inputs with an API token", r["go"][1], r["rust"][1])
     r = both(lambda base: jcall(base, "GET", f"/api/v1/agentbots/{canvas}/inputs", token="Bearer e2e-beta-own"))
     same("agentbot inputs with a beta token", r["go"][1], r["rust"][1])
+
+
+def failures(stack, stub, canvas, api, out):
+    """Runs that fail: what the stream carries and what is left in the rows."""
+    cases = [
+        ("the classifier's model fails", "FAIL-CAT how much is parking"),
+        ("the answering model fails", "FAIL-AGENT how much is parking"),
+    ]
+    for label, query in cases:
+        shapes, rows = {}, {}
+        for side, base in (("go", GO), ("rust", RUST)):
+            st, fr, raw = sse(base, "/api/v1/agents/chat/completions", api, {"agent_id": canvas, "query": query, "stream": True})
+            ev = events(fr)
+            shapes[side] = [e[0] for e in ev]
+            first = next((f for f in fr if f != "[DONE]" and "session_id" in f), None)
+            rows[side] = session_rows(stack, first["session_id"]) if first else None
+            shapes[side + "-text"] = answer_of(fr)
+        ok = shapes["go"] == shapes["rust"]
+        record(f"failure ({label}): event kinds {shapes['go'][-4:]}", "PASS" if ok else "FAIL", f"go={shapes['go']} rust={shapes['rust']}")
+        g, r = rows["go"], rows["rust"]
+        if g and r:
+            gm = {m["message_id"]: f"MSG{i}" for i, m in enumerate(g["messages"]) if m["role"] == "user"}
+            rm = {m["message_id"]: f"MSG{i}" for i, m in enumerate(r["messages"]) if m["role"] == "user"}
+            ng, nr = norm_session(g, {g["id"]: "S", **gm}), norm_session(r, {r["id"]: "S", **rm})
+            errs = (bool(ng.pop("errors")), bool(nr.pop("errors")))
+            # The failure text is each server's own wording (listed below).
+            for n in (ng, nr):
+                for m in n["messages"]:
+                    if m["role"] == "assistant" and "ERROR" in m["content"] + "chat API error":
+                        m["content"] = "<failure text>"
+                if n.get("dsl"):
+                    n["dsl"].get("globals", {}).pop("sys.history", None)
+                    n["dsl"]["history"] = [h for h in n["dsl"]["history"] if h[0] == "user"]
+            d = diff_json(ng, nr)
+            record(f"failure ({label}): rows left behind ({len(g['messages'])} messages, round {g['round']}, errors set {errs})",
+                   "PASS" if not d and errs == (True, True) else "FAIL", "\n         ".join(d[:6]) or str(errs))
+        # The text each shows.
+        record(f"failure ({label}): text shown, go vs rust", "KNOWN",
+               f"go: {shapes['go-text'][:160]!r}\n         rust: {shapes['rust-text'][:160]!r}")
+    # A dataset the caller may not use stops the Retrieval node.
+    found = stack.rows("SELECT JSON_OBJECT('t', tenant_id) FROM api_token WHERE token='ragflow-e2e-invitee'")
+    if found:
+        member = found[0]["t"]
+        owner_tenant = stack.rows(f"SELECT JSON_OBJECT('t', user_id) FROM user_canvas WHERE id='{canvas}'")[0]["t"]
+        stack.sql(f"UPDATE user_tenant SET role='normal' WHERE user_id='{member}' AND tenant_id='{owner_tenant}'")
+        stack.sql(f"UPDATE knowledgebase SET permission='me' WHERE tenant_id='{owner_tenant}'")
+        texts = {}
+        for side, base in (("go", GO), ("rust", RUST)):
+            st, fr, raw = sse(base, "/api/v1/agents/chat/completions", "Bearer ragflow-e2e-invitee",
+                              {"agent_id": canvas, "query": "how much is parking", "stream": True})
+            texts[side] = answer_of(fr)
+        ok = all("permission: access denied" in t for t in texts.values())
+        record("a dataset the caller may not use stops the Retrieval node on both", "PASS" if ok else "FAIL", str(texts)[:400])
+        stack.sql(f"UPDATE knowledgebase SET permission='team' WHERE tenant_id='{owner_tenant}'")
+        stack.sql(f"UPDATE user_tenant SET role='invite' WHERE user_id='{member}' AND tenant_id='{owner_tenant}'")
 
 
 def strip_resp(v):

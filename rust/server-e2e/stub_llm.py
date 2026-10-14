@@ -19,6 +19,9 @@ as a different reply:
 * every other request is answered with "STUB-<sha1 of the messages>: " and a
   prefix of the last user message, streamed in 7-character pieces.
 
+A last user message containing FAIL-CAT (to a classifier) or FAIL-AGENT (to
+any other request) is answered with HTTP 500.
+
 A last user message containing the word SLOW is streamed one piece every
 half second, which lets a test cancel a run in flight.
 
@@ -126,6 +129,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.endswith("/chat/completions"):
             return self.reply(404, {"error": "not found"})
         messages = body.get("messages") or []
+        # A model that fails: FAIL-CAT in a classification question, FAIL-AGENT
+        # in an answer request.
+        last = text_of(messages[-1].get("content")) if messages else ""
+        system = "\n".join(text_of(m.get("content")) for m in messages if m.get("role") == "system")
+        if ("FAIL-CAT" in last and categories(system)) or ("FAIL-AGENT" in last and not categories(system)):
+            return self.reply(500, {"error": {"message": "stub model failure", "type": "server_error"}})
         answer = answer_for(messages)
         usage = usage_for(messages, answer)
         model = body.get("model", "stub")
