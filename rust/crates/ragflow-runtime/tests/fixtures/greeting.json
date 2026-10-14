@@ -1,0 +1,9 @@
+{
+  "components": {
+    "begin": {"obj": {"component_name": "Begin", "params": {"prologue": "Hi"}}, "downstream": ["Agent:Reply"], "upstream": []},
+    "Agent:Reply": {"obj": {"component_name": "Agent", "params": {"sys_prompt": "Be brief.", "prompts": [{"role": "user", "content": "{sys.query}"}]}}, "downstream": ["Message:Out"], "upstream": ["begin"]},
+    "Message:Out": {"obj": {"component_name": "Message", "params": {"content": ["{Agent:Reply@content}"]}}, "downstream": [], "upstream": ["Agent:Reply"]}
+  },
+  "globals": {"sys.query": "", "sys.user_id": ""},
+  "graph": {"nodes": [], "edges": []}
+}

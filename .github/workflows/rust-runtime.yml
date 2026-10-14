@@ -1,0 +1,24 @@
+# This fork only: builds and tests the Rust runtime under rust/. Never touches
+# upstream's pipelines.
+name: rust-runtime
+on:
+  push:
+    branches-ignore: [main]
+    paths: ["rust/**", ".github/workflows/rust-runtime.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust-runtime.yml"]
+jobs:
+  test:
+    if: github.repository != 'infiniflow/ragflow'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
