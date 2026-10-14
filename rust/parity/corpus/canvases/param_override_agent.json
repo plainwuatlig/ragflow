@@ -1,0 +1,65 @@
+{
+  "globals": {
+    "sys.query": ""
+  },
+  "components": {
+    "begin": {
+      "obj": {
+        "component_name": "Begin",
+        "params": {
+          "inputs": {
+            "sys_prompt": {
+              "type": "line",
+              "name": "sys_prompt"
+            },
+            "user_prompt": {
+              "type": "line",
+              "name": "user_prompt"
+            }
+          }
+        }
+      },
+      "upstream": [],
+      "downstream": [
+        "Agent:A"
+      ]
+    },
+    "Agent:A": {
+      "obj": {
+        "component_name": "Agent",
+        "params": {
+          "llm_id": "parity-chat@OpenAI",
+          "sys_prompt": "configured system prompt",
+          "prompts": [
+            {
+              "role": "user",
+              "content": "configured user prompt: {sys.query}"
+            }
+          ],
+          "tools": [],
+          "mcp": []
+        }
+      },
+      "upstream": [
+        "begin"
+      ],
+      "downstream": [
+        "Message:M"
+      ]
+    },
+    "Message:M": {
+      "obj": {
+        "component_name": "Message",
+        "params": {
+          "content": [
+            "{Agent:A@content}"
+          ]
+        }
+      },
+      "upstream": [
+        "Agent:A"
+      ],
+      "downstream": []
+    }
+  }
+}

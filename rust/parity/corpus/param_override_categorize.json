@@ -1,0 +1,7 @@
+{
+  "canvas": "canvases/param_override_categorize.json",
+  "query": "The app crashes",
+  "recordings": {
+    "Categorize:C#0": "Tech"
+  }
+}

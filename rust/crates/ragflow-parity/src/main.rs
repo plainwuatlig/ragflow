@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! ragflow-parity run    --canvas dsl.json --query Q --recordings rec.json
-//! ragflow-parity diff   go.jsonl rust.jsonl
+//! ragflow-parity diff   go.jsonl rust.jsonl [--canvas dsl.json]
 //! ragflow-parity corpus <dir> --oracle <oracle-go> --conf <conf/models> [--out <dir>] [--only <substr>]
 //! ```
 //!
@@ -102,9 +102,15 @@ fn cmd_diff(args: &[String]) -> Result<ExitCode, String> {
     let [go, rust] = a.positional.as_slice() else {
         return Err("diff takes two files: go.jsonl rust.jsonl".into());
     };
+    // With --canvas, independent components may finish in any order.
+    let topo = match a.get("canvas") {
+        Some(path) => Some(compare::topology(&case::read_json(Path::new(path))?)),
+        None => None,
+    };
     let report = compare::compare(
         &compare::parse(&read_lines(go)?),
         &compare::parse(&read_lines(rust)?),
+        topo.as_ref(),
     );
     print_report("diff", &report);
     Ok(if report.passed() {
@@ -267,7 +273,11 @@ fn run_case(path: &Path, oracle: &str, conf: &str, out_root: &Path) -> Result<Ro
         });
     }
 
-    let report = compare::compare(&compare::parse(&go_lines), &compare::parse(&rust.lines));
+    let report = compare::compare(
+        &compare::parse(&go_lines),
+        &compare::parse(&rust.lines),
+        Some(&compare::topology(&case.dsl)),
+    );
     let mut text = String::new();
     for (check, d) in &report.hard {
         text.push_str(&format!("[FAIL {check}]\n{}\n", d.trim_end()));

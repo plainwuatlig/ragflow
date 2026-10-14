@@ -1,0 +1,58 @@
+{
+  "globals": {
+    "sys.query": ""
+  },
+  "components": {
+    "begin": {
+      "obj": {
+        "component_name": "Begin",
+        "params": {}
+      },
+      "upstream": [],
+      "downstream": [
+        "Switch:S"
+      ]
+    },
+    "Switch:S": {
+      "obj": {
+        "component_name": "Switch",
+        "params": {
+          "conditions": [
+            {
+              "op": "and",
+              "clauses": [
+                {
+                  "left": "{sys.query}",
+                  "op": "not empty"
+                }
+              ]
+            }
+          ],
+          "end_cpn_ids": [
+            "Message:No"
+          ]
+        }
+      },
+      "upstream": [
+        "begin"
+      ],
+      "downstream": [
+        "Message:No"
+      ]
+    },
+    "Message:No": {
+      "obj": {
+        "component_name": "Message",
+        "params": {
+          "content": [
+            "no"
+          ]
+        }
+      },
+      "upstream": [
+        "Switch:S"
+      ],
+      "downstream": []
+    }
+  }
+}

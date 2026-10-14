@@ -1,0 +1,7 @@
+{
+  "canvas": "canvases/categorize_route_missing.json",
+  "query": "hi",
+  "recordings": {
+    "Categorize:C#0": "B"
+  }
+}

@@ -88,7 +88,11 @@ Hard (fail the case): order of `node_finished` component ids; each
 component's outputs; every LLM call; the concatenated `message` content;
 `workflow_finished.outputs`; whether the run ended in `error`.
 Soft (reported, never fail): error text; how message content is split into
-frames.
+frames; the order of components Go runs concurrently, and of their message
+frames. Go picks ready components out of a map and runs them in goroutines,
+so their order varies between runs (seen on switch_parallel_branch); the
+hard check keeps only the order the canvas fixes: ancestors before
+descendants, and a Message's deferred Agents in template order.
 
 Known (reported as KNOWN; the case neither passes nor fails; `run.sh` exits
 0): ruled divergences, listed in `crates/ragflow-parity/src/compare.rs`.
