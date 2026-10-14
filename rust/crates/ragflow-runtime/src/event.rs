@@ -29,7 +29,7 @@ pub enum Event {
         content: String,
     },
     /// `reference` is the run's citation payload (`{chunks, doc_aggs,
-    /// total}`) when Retrieval recorded any.
+    /// total}`) when Retrieval recorded any, else `null` on the wire.
     MessageEnd {
         reference: Option<Value>,
     },
@@ -93,10 +93,9 @@ impl Event {
                 "created_at": created_at,
             }),
             Event::Message { content } => json!({ "content": content }),
-            Event::MessageEnd { reference } => match reference {
-                Some(r) => json!({ "reference": r }),
-                None => json!({}),
-            },
+            // upstream stores the payload in an interface field, so a run
+            // without citations still writes `"reference": null`.
+            Event::MessageEnd { reference } => json!({ "reference": reference }),
             Event::WorkflowFinished {
                 query,
                 outputs,

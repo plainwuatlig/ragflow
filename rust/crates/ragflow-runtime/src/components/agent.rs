@@ -73,6 +73,7 @@ impl Params {
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,
+            stream: true,
         }
     }
 }

@@ -2,7 +2,9 @@
 //! does no network I/O. `ragflow-serve` supplies an OpenAI-compatible
 //! implementation.
 
-/// A RAGFlow model id: `model@provider` or `model@instance@provider`.
+/// A RAGFlow model id: `model@provider`, `model@instance@provider` (the
+/// model name may itself contain `@`: the split is right-anchored), or a bare
+/// 32-character hex `tenant_model` id, which has no provider.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelRef {
     pub model: String,
@@ -12,26 +14,36 @@ pub struct ModelRef {
 
 impl ModelRef {
     pub fn parse(id: &str) -> Result<Self, String> {
+        let id = id.trim();
         let parts: Vec<&str> = id.split('@').collect();
-        match parts.as_slice() {
-            [model, provider] if !model.is_empty() && !provider.is_empty() => Ok(ModelRef {
-                model: model.to_string(),
+        if parts.len() == 1 && id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(ModelRef {
+                model: id.to_string(),
                 instance: None,
-                provider: provider.to_string(),
-            }),
-            [model, instance, provider]
-                if !model.is_empty() && !instance.is_empty() && !provider.is_empty() =>
-            {
-                Ok(ModelRef {
-                    model: model.to_string(),
-                    instance: Some(instance.to_string()),
-                    provider: provider.to_string(),
-                })
-            }
-            _ => Err(format!(
-                "model id {id:?} is not model@provider or model@instance@provider"
-            )),
+                provider: String::new(),
+            });
         }
+        let n = parts.len();
+        if n < 2 || parts[n - 1].is_empty() {
+            return Err(format!(
+                "model id {id:?} is not model@provider or model@instance@provider"
+            ));
+        }
+        let (model, instance) = if n == 2 {
+            (parts[0].to_string(), None)
+        } else {
+            (parts[..n - 2].join("@"), Some(parts[n - 2].to_string()))
+        };
+        if model.is_empty() || instance.as_deref() == Some("") {
+            return Err(format!(
+                "model id {id:?} is not model@provider or model@instance@provider"
+            ));
+        }
+        Ok(ModelRef {
+            model,
+            instance,
+            provider: parts[n - 1].to_string(),
+        })
     }
 }
 
@@ -46,6 +58,9 @@ pub struct ChatOptions {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_tokens: Option<u64>,
+    /// The caller reads the reply as a stream (upstream's Agent does;
+    /// Categorize does not), which only changes the wire call.
+    pub stream: bool,
 }
 
 pub trait Models: Send + Sync {
