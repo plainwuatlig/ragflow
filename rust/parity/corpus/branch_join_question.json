@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/branch_join.json",
+  "query": "How late are you open?",
+  "recordings": { "Categorize:Intent#0": "Question", "Agent:Answer#0": "Until 9pm." }
+}

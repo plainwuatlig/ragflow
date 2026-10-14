@@ -1,0 +1,35 @@
+{
+  "globals": { "sys.query": "", "env.tier": "" },
+  "components": {
+    "begin": {
+      "obj": { "component_name": "Begin", "params": { "inputs": {} } },
+      "upstream": [], "downstream": ["Switch:Route"]
+    },
+    "Switch:Route": {
+      "obj": { "component_name": "Switch", "params": {
+        "conditions": [
+          { "op": "and", "clauses": [{ "left": "{env.tier}", "op": "not empty" }], "to": ["Message:Vip"] },
+          { "logical_operator": "and", "items": [
+              { "cpn_id": "sys.query", "operator": "contains", "value": "refund" },
+              { "cpn_id": "sys.query", "operator": "not contains", "value": "urgent" }
+            ], "to": ["Message:Refund"] },
+          { "op": "or", "clauses": [
+              { "left": "{sys.query}", "op": "start with", "right": "BUG" },
+              { "left": "{sys.query}", "op": "end with", "right": "crash" }
+            ], "to": "Message:Bug" },
+          { "op": "and", "clauses": [{ "left": "{sys.query}", "op": "=", "right": "42.0" }], "to": ["Message:FortyTwo"] },
+          { "op": "and", "clauses": [{ "left": "{sys.query}", "op": "≥", "right": "100" }], "to": ["Message:Big"] }
+        ],
+        "end_cpn_ids": ["Message:Default"]
+      } },
+      "upstream": ["begin"],
+      "downstream": ["Message:Vip", "Message:Refund", "Message:Bug", "Message:FortyTwo", "Message:Big", "Message:Default"]
+    },
+    "Message:Vip": { "obj": { "component_name": "Message", "params": { "content": ["vip"] } }, "upstream": ["Switch:Route"], "downstream": [] },
+    "Message:Refund": { "obj": { "component_name": "Message", "params": { "content": ["refund: {sys.query}"] } }, "upstream": ["Switch:Route"], "downstream": [] },
+    "Message:Bug": { "obj": { "component_name": "Message", "params": { "content": ["bug: {sys.query}"] } }, "upstream": ["Switch:Route"], "downstream": [] },
+    "Message:FortyTwo": { "obj": { "component_name": "Message", "params": { "content": ["the answer"] } }, "upstream": ["Switch:Route"], "downstream": [] },
+    "Message:Big": { "obj": { "component_name": "Message", "params": { "content": ["big number {sys.query}"] } }, "upstream": ["Switch:Route"], "downstream": [] },
+    "Message:Default": { "obj": { "component_name": "Message", "params": { "content": ["default: {sys.query}"] } }, "upstream": ["Switch:Route"], "downstream": [] }
+  }
+}

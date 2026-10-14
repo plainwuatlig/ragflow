@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/categorize_branch.json",
+  "query": "I was billed twice for my plan",
+  "recordings": { "Categorize:Route#0": "Billing" }
+}

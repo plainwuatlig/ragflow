@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/agent_deferred.json",
+  "query": "What is the capital of France?",
+  "recordings": { "Agent:Writer#0": "Paris." }
+}

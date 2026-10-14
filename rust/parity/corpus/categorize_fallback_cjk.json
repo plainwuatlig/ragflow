@@ -1,0 +1,5 @@
+{
+  "canvas": "canvases/categorize_branch.json",
+  "query": "請問\n營業時間？ \"quoted\"",
+  "recordings": { "Categorize:Route#0": "I am not sure" }
+}

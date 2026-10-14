@@ -1,0 +1,24 @@
+{
+  "globals": { "sys.query": "" },
+  "components": {
+    "begin": { "obj": { "component_name": "Begin", "params": { "inputs": {} } }, "upstream": [], "downstream": ["Agent:Pro", "Agent:Con"] },
+    "Agent:Pro": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@OpenAI", "sys_prompt": "Argue for the proposal.",
+        "prompts": [{ "role": "user", "content": "{sys.query}" }], "tools": [], "mcp": []
+      } },
+      "upstream": ["begin"], "downstream": ["Message:Summary"]
+    },
+    "Agent:Con": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@OpenAI", "sys_prompt": "Argue against the proposal.",
+        "prompts": [{ "role": "user", "content": "{sys.query}" }], "tools": [], "mcp": []
+      } },
+      "upstream": ["begin"], "downstream": ["Message:Summary"]
+    },
+    "Message:Summary": {
+      "obj": { "component_name": "Message", "params": { "content": ["PRO: {Agent:Pro@content}\nCON: {Agent:Con@content}"] } },
+      "upstream": ["Agent:Pro", "Agent:Con"], "downstream": []
+    }
+  }
+}

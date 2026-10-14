@@ -1,0 +1,35 @@
+{
+  "globals": { "sys.query": "" },
+  "components": {
+    "begin": { "obj": { "component_name": "Begin", "params": { "inputs": {} } }, "upstream": [], "downstream": ["Categorize:Intent"] },
+    "Categorize:Intent": {
+      "obj": { "component_name": "Categorize", "params": {
+        "llm_id": "parity-chat@OpenAI",
+        "items": [
+          { "name": "Question", "description": "The visitor asks something", "examples": [], "to": ["Agent:Answer"] },
+          { "name": "Chitchat", "description": "Greetings and small talk", "examples": [{ "value": "hi" }], "to": ["Message:Hi"] }
+        ]
+      } },
+      "upstream": ["begin"], "downstream": ["Agent:Answer", "Message:Hi"]
+    },
+    "Agent:Answer": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@OpenAI", "sys_prompt": "Answer briefly.",
+        "prompts": [{ "role": "user", "content": "{sys.query}" }], "tools": [], "mcp": []
+      } },
+      "upstream": ["Categorize:Intent"], "downstream": ["Message:Answer"]
+    },
+    "Message:Answer": {
+      "obj": { "component_name": "Message", "params": { "content": ["{Agent:Answer@content}"] } },
+      "upstream": ["Agent:Answer"], "downstream": ["Message:Footer"]
+    },
+    "Message:Hi": {
+      "obj": { "component_name": "Message", "params": { "content": ["Hello! ({Categorize:Intent@category})"] } },
+      "upstream": ["Categorize:Intent"], "downstream": ["Message:Footer"]
+    },
+    "Message:Footer": {
+      "obj": { "component_name": "Message", "params": { "content": ["-- end of reply ({Categorize:Intent@category})"] } },
+      "upstream": ["Message:Answer", "Message:Hi"], "downstream": []
+    }
+  }
+}

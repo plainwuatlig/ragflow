@@ -1,0 +1,20 @@
+{
+  "globals": { "sys.query": "", "sys.files": [] },
+  "components": {
+    "begin": { "obj": { "component_name": "Begin", "params": { "inputs": {} } }, "upstream": [], "downstream": ["Agent:Writer"] },
+    "Agent:Writer": {
+      "obj": { "component_name": "Agent", "params": {
+        "llm_id": "parity-chat@default@OpenAI",
+        "sys_prompt": "You are a concise assistant. Today is {sys.date}.",
+        "prompts": [{ "role": "user", "content": "Question: {sys.query}" }],
+        "temperature": 0.2, "top_p": 0.9, "max_tokens": 512, "maxTokensEnabled": true,
+        "max_rounds": 1, "message_history_window_size": 12, "tools": [], "mcp": [], "cite": false
+      } },
+      "upstream": ["begin"], "downstream": ["Message:Reply"]
+    },
+    "Message:Reply": {
+      "obj": { "component_name": "Message", "params": { "content": ["Answer: {Agent:Writer@content}"] } },
+      "upstream": ["Agent:Writer"], "downstream": []
+    }
+  }
+}
