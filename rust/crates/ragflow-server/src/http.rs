@@ -45,6 +45,7 @@ pub struct App {
 
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
+        .route("/healthz", get(healthz))
         .route("/api/v1/agents/chat/completions", post(chat_completions))
         .route(
             "/api/v1/agents/{canvas_id}/sessions",
@@ -71,6 +72,12 @@ pub fn router(app: Arc<App>) -> Router {
             get(agentbot_logs),
         )
         .with_state(app)
+}
+
+/// Liveness for a container health check or a load balancer: the process
+/// answers. It touches no store, so a store outage does not restart the server.
+async fn healthz() -> Response {
+    respond(200, r#"{"status":"ok"}"#.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1477,6 +1484,14 @@ mod tests {
                 d => serde_json::from_str(d).unwrap(),
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn healthz_answers_without_credentials() {
+        let (app, _w) = app();
+        let (status, body) = send(&app, "GET", "/healthz", None, None).await;
+        assert_eq!(status, 200);
+        assert_eq!(body, r#"{"status":"ok"}"#);
     }
 
     #[tokio::test]
