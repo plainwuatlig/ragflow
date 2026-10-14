@@ -1,7 +1,7 @@
 ---
 why: the Rust runtime claims upstream's Go semantics; this oracle runs both on the same canvas, query and recorded LLM answers and diffs the event streams
 lane: pull
-verify: rust/parity/run.sh  (exit 0 only when every case passes)
+verify: rust/parity/run.sh  (exit 0 when no case FAILs; KNOWN cases are ruled differences)
 invalidates-when: upstream renames or reshapes service.AgentService.buildRunFunc, canvas.Runner, runtime.BindComponentFraction or models.GetPreconfiguredDriver; or the corpus gains a component the oracle cannot run without a DB
 ---
 
@@ -88,7 +88,14 @@ Hard (fail the case): order of `node_finished` component ids; each
 component's outputs; every LLM call; the concatenated `message` content;
 `workflow_finished.outputs`; whether the run ended in `error`.
 Soft (reported, never fail): error text; how message content is split into
-frames (Go streams template literals and agent deltas as separate frames).
+frames.
+
+Known (reported as KNOWN; the case neither passes nor fails; `run.sh` exits
+0): ruled divergences, listed in `crates/ragflow-parity/src/compare.rs`.
+There is one (Plain, 2026-10-14): a deferred Agent's `node_finished`
+outputs, where Go reports the unopened stream `{"content":{"Open":null}}`
+and Rust the Agent's real outputs. Every case with a deferred Agent shows
+it.
 
 ## Scope
 

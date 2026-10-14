@@ -11,6 +11,13 @@
 //! `message` content, the final answer (`workflow_finished.outputs`), and
 //! whether the run ended in an `error`. Soft checks are reported but do not
 //! fail: the error text, and how `message` content is split into frames.
+//!
+//! Known differences are ruled divergences: they are reported as KNOWN and
+//! neither pass nor fail a case. There is exactly one (Plain, 2026-10-14):
+//! a deferred Agent's `node_finished` outputs. Go emits that event from the
+//! workflow engine's copy of the run state, which still holds the unopened
+//! stream (`{"content":{"Open":null}}`, canvas/scheduler.go RegisterDeferredNode
+//! callback); Rust reports the Agent's real outputs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -80,6 +87,15 @@ fn text(v: &Value, key: &str) -> String {
 pub struct Report {
     pub hard: Vec<(&'static str, String)>,
     pub soft: Vec<(&'static str, String)>,
+    pub known: Vec<(&'static str, String)>,
+}
+
+/// The one known difference: Go's outputs for a deferred Agent.
+fn is_unopened_deferred_stream(go_outputs: &Value) -> bool {
+    same(
+        go_outputs,
+        &serde_json::json!({ "content": { "Open": null } }),
+    )
 }
 
 impl Report {
@@ -91,6 +107,7 @@ impl Report {
 pub fn compare(go: &Stream, rust: &Stream) -> Report {
     let mut hard = Vec::new();
     let mut soft = Vec::new();
+    let mut known = Vec::new();
 
     if go.finished != rust.finished {
         hard.push((
@@ -103,6 +120,11 @@ pub fn compare(go: &Stream, rust: &Stream) -> Report {
     let ids: BTreeSet<&String> = go.outputs.keys().chain(rust.outputs.keys()).collect();
     for id in ids {
         match (go.outputs.get(id), rust.outputs.get(id)) {
+            (Some(g), Some(r)) if is_unopened_deferred_stream(g) => {
+                if !same(g, r) {
+                    known.push(("deferred_agent_outputs", format!("{id}: go {g}, rust {r}")));
+                }
+            }
             (Some(g), Some(r)) => {
                 if !same(g, r) {
                     let _ = writeln!(out, "{id}:");
@@ -180,7 +202,7 @@ pub fn compare(go: &Stream, rust: &Stream) -> Report {
         _ => {}
     }
 
-    Report { hard, soft }
+    Report { hard, soft, known }
 }
 
 fn show(v: Option<&Value>) -> String {
