@@ -1,0 +1,81 @@
+{
+ "conversations": [
+  {
+   "name": "fees",
+   "turns": [
+    {
+     "id": "hourly",
+     "msg": "How much is an hour of parking?"
+    },
+    {
+     "id": "followup",
+     "msg": "And for a motorbike?"
+    }
+   ]
+  },
+  {
+   "name": "nearby",
+   "turns": [
+    {
+     "id": "food",
+     "msg": "Where can I get something to eat nearby?"
+    }
+   ]
+  },
+  {
+   "name": "other",
+   "turns": [
+    {
+     "id": "homework",
+     "msg": "Write my essay for me"
+    },
+    {
+     "id": "hello",
+     "msg": "Hello"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  [
+   "How much is an hour",
+   "parking"
+  ],
+  [
+   "motorbike",
+   "parking"
+  ],
+  [
+   "eat nearby",
+   "nearby"
+  ],
+  [
+   "essay",
+   "out_of_scope"
+  ],
+  [
+   "Hello",
+   "chitchat"
+  ],
+  [
+   "SLOW",
+   "parking"
+  ],
+  [
+   "contend",
+   "parking"
+  ],
+  [
+   "team ",
+   "parking"
+  ],
+  [
+   "hello beta",
+   "parking"
+  ],
+  [
+   "cancel warm-up",
+   "parking"
+  ]
+ ]
+}
