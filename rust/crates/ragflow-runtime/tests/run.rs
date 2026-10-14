@@ -13,6 +13,9 @@ use serde_json::{json, Value};
 struct FakeAgent(String);
 impl Component for FakeAgent {
     fn invoke(&self, ctx: &mut NodeCtx<'_>) -> Result<Outputs, String> {
+        if let Some(error) = self.0.strip_prefix("!") {
+            return Err(error.to_string());
+        }
         let text = ragflow_runtime::template::render_strict(&self.0, ctx.state)
             .map_err(|e| e.to_string())?;
         Ok(json!({ "content": text }).as_object().unwrap().clone())
@@ -135,23 +138,72 @@ fn a_route_missing_from_downstream_is_dropped() {
 }
 
 #[test]
-fn an_agent_deferring_to_a_message_lets_the_template_win() {
-    // Every child of the Agent is a Message, so the Message renders its own
-    // template rather than the Agent's raw content.
+fn a_deferred_agent_runs_inside_the_message_in_template_order() {
+    // Both Agents feed only a terminal Message, so both defer: they start
+    // when scheduled and finish when the Message reaches their reference.
     let b = bot(json!({ "components": {
-        "begin": node("Begin", json!({}), &[], &["Agent:a"]),
-        "Agent:a": node("Agent", json!({ "say": "raw" }), &["begin"], &["Message:m"]),
-        "Message:m": node("Message", json!({ "content": ["Answer: {Agent:a@content}"] }), &["Agent:a"], &[]),
+        "begin": node("Begin", json!({}), &[], &["Agent:a", "Agent:b"]),
+        "Agent:a": node("Agent", json!({ "say": "A" }), &["begin"], &["Message:m"]),
+        "Agent:b": node("Agent", json!({ "say": "B" }), &["begin"], &["Message:m"]),
+        "Message:m": node("Message", json!({ "content": ["1 {Agent:b@content} 2 {Agent:a@content}"] }), &["Agent:a", "Agent:b"], &[]),
     }}));
     let mut events = Vec::new();
-    b.run(input("q"), &mut events).unwrap();
-    assert_eq!(messages(&events), ["Answer: raw"]);
+    let out = b.run(input("q"), &mut events).unwrap();
+    assert_eq!(ran(&events), ["begin", "Agent:b", "Agent:a", "Message:m"]);
+    assert_eq!(messages(&events), ["1 ", "B", " 2 ", "A"]);
+    assert_eq!(out.answer["content"], "1 B 2 A");
 }
 
 #[test]
-fn an_agent_not_deferring_overrides_the_message_template() {
-    // The Agent also feeds a second Agent, so it does not defer: upstream's
-    // Message then prints the incoming content, not its template.
+fn an_unreferenced_deferred_agent_finishes_at_the_end_without_running() {
+    let b = bot(json!({ "components": {
+        "begin": node("Begin", json!({}), &[], &["Agent:a"]),
+        "Agent:a": node("Agent", json!({ "say": "!must not run" }), &["begin"], &["Message:m"]),
+        "Message:m": node("Message", json!({ "content": ["fixed"] }), &["Agent:a"], &[]),
+    }}));
+    let mut events = Vec::new();
+    b.run(input("q"), &mut events).unwrap();
+    assert_eq!(ran(&events), ["begin", "Message:m", "Agent:a"]);
+    assert_eq!(messages(&events), ["fixed"]);
+}
+
+#[test]
+fn a_failing_deferred_agent_becomes_the_reply_without_workflow_finished() {
+    let b = bot(json!({ "components": {
+        "begin": node("Begin", json!({}), &[], &["Agent:a"]),
+        "Agent:a": node("Agent", json!({ "say": "!component: invalid param \"model_id\": required" }), &["begin"], &["Message:m"]),
+        "Message:m": node("Message", json!({ "content": ["{Agent:a@content}"] }), &["Agent:a"], &[]),
+    }}));
+    let mut events = Vec::new();
+    let out = b.run(input("q"), &mut events).unwrap();
+    assert_eq!(
+        out.deferred_failure.as_deref(),
+        Some(r#"component: invalid param "model_id": required"#)
+    );
+    let names: Vec<_> = events.iter().map(Event::name).collect();
+    assert_eq!(
+        names,
+        [
+            "workflow_started",
+            "node_started",
+            "node_finished",
+            "node_started",
+            "node_started",
+            "node_finished",
+            "message",
+            "message_end"
+        ]
+    );
+    assert_eq!(
+        messages(&events),
+        [r#"component: invalid param "model_id": required"#]
+    );
+}
+
+#[test]
+fn an_eager_agent_does_not_override_the_message_template() {
+    // The Agent also feeds a second Agent, so it runs eagerly; the Message
+    // template still wins over the Agent's incoming `content` (main).
     let b = bot(json!({ "components": {
         "begin": node("Begin", json!({}), &[], &["Agent:a"]),
         "Agent:a": node("Agent", json!({ "say": "raw" }), &["begin"], &["Message:m", "Agent:b"]),
@@ -160,7 +212,46 @@ fn an_agent_not_deferring_overrides_the_message_template() {
     }}));
     let mut events = Vec::new();
     b.run(input("q"), &mut events).unwrap();
-    assert_eq!(messages(&events), ["raw"]);
+    assert_eq!(messages(&events), ["Answer: raw"]);
+}
+
+#[test]
+fn an_upstream_text_input_overrides_the_template_and_message_edges_carry_no_data() {
+    // Message:m1 gets Agent:a's {text} and prints it over its template.
+    // Message:m2's only upstream is a Message, so it reads the workflow
+    // input ({query}), which has no text to print.
+    let mut r = registry();
+    r.register("Agent", |_: &Node| {
+        struct Text;
+        impl Component for Text {
+            fn invoke(&self, _: &mut NodeCtx<'_>) -> Result<Outputs, String> {
+                Ok(json!({ "text": "override" }).as_object().unwrap().clone())
+            }
+        }
+        Ok(Box::new(Text) as Box<dyn Component>)
+    });
+    let dsl = json!({ "components": {
+        "begin": node("Begin", json!({}), &[], &["Agent:a"]),
+        "Agent:a": node("Agent", json!({}), &["begin"], &["Message:m1", "Message:m2"]),
+        "Message:m1": node("Message", json!({ "content": ["template"] }), &["Agent:a"], &["Message:m2"]),
+        "Message:m2": node("Message", json!({ "content": [""] }), &["Message:m1"], &[]),
+    }});
+    let b = Bot::new(compile(&dsl.to_string()).unwrap(), &r).unwrap();
+    let mut events = Vec::new();
+    b.run(input("the query"), &mut events).unwrap();
+    assert_eq!(messages(&events), ["override"]);
+    let m2_inputs = events.iter().find_map(|e| match e {
+        Event::NodeStarted {
+            component_id,
+            inputs,
+            ..
+        } if component_id == "Message:m2" => Some(inputs.clone()),
+        _ => None,
+    });
+    assert_eq!(
+        m2_inputs.unwrap(),
+        *json!({ "query": "the query" }).as_object().unwrap()
+    );
 }
 
 #[test]

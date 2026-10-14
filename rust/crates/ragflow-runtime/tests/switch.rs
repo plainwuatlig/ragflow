@@ -1,4 +1,4 @@
-//! Switch semantics against upstream's switch.go (v1.0.0-rc1).
+//! Switch semantics against upstream's switch.go (main).
 
 use chrono::{FixedOffset, TimeZone};
 use ragflow_runtime::{
@@ -186,7 +186,9 @@ fn new_clause_form_with_or() {
 fn an_empty_group_never_matches_and_a_group_without_to_routes_nowhere() {
     let empty_group = json!({ "conditions": [{ "items": [], "to": ["Message:yes"] }], "end_cpn_ids": ["Message:no"] });
     assert_eq!(run(json!({}), empty_group, "q").unwrap(), ["no"]);
-    // matched_0 is not in downstream, so nothing after the Switch runs.
+    // matched_0 is not in downstream, so nothing after the Switch runs; with
+    // nothing shown, the empty answer is emitted once at the end, as
+    // upstream's service does.
     let no_to = json!({ "conditions": [{ "items": [{ "cpn_id": "sys.query", "operator": "not empty" }] }], "end_cpn_ids": ["Message:no"] });
-    assert_eq!(run(json!({}), no_to, "q").unwrap(), Vec::<String>::new());
+    assert_eq!(run(json!({}), no_to, "q").unwrap(), [""]);
 }
