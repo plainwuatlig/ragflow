@@ -531,21 +531,32 @@ def failures(stack, stub, canvas, api, out):
             gm = {m["message_id"]: f"MSG{i}" for i, m in enumerate(g["messages"]) if m["role"] == "user"}
             rm = {m["message_id"]: f"MSG{i}" for i, m in enumerate(r["messages"]) if m["role"] == "user"}
             ng, nr = norm_session(g, {g["id"]: "S", **gm}), norm_session(r, {r["id"]: "S", **rm})
-            errs = (bool(ng.pop("errors")), bool(nr.pop("errors")))
-            # The failure text is each server's own wording (listed below).
-            for n in (ng, nr):
-                for m in n["messages"]:
-                    if m["role"] == "assistant" and "ERROR" in m["content"] + "chat API error":
-                        m["content"] = "<failure text>"
-                if n.get("dsl"):
-                    n["dsl"].get("globals", {}).pop("sys.history", None)
-                    n["dsl"]["history"] = [h for h in n["dsl"]["history"] if h[0] == "user"]
+            # The `errors` column is compared as written, not as a flag.
+            errs = (ng.get("errors"), nr.get("errors"))
             d = diff_json(ng, nr)
-            record(f"failure ({label}): rows left behind ({len(g['messages'])} messages, round {g['round']}, errors set {errs})",
-                   "PASS" if not d and errs == (True, True) else "FAIL", "\n         ".join(d[:6]) or str(errs))
+            record(f"failure ({label}): rows left behind ({len(g['messages'])} messages, round {g['round']}, errors {str(errs[0])[:60]!r})",
+                   "PASS" if not d and all(errs) else "FAIL", "\n         ".join(d[:6]) or str(errs))
         # The text each shows.
-        record(f"failure ({label}): text shown, go vs rust", "KNOWN",
-               f"go: {shapes['go-text'][:160]!r}\n         rust: {shapes['rust-text'][:160]!r}")
+        same = shapes["go-text"] == shapes["rust-text"]
+        record(f"failure ({label}): text shown is identical", "PASS" if same else "FAIL",
+               f"go: {shapes['go-text'][:300]!r}\n         rust: {shapes['rust-text'][:300]!r}")
+    # A storage failure on the beta (agentbot) endpoint: Go puts the cause
+    # in the error frame, ragflow-server answers with its generic text
+    # (a deliberate difference). The reference table is renamed away on the
+    # throwaway copy for the length of the call.
+    stack.sql("RENAME TABLE api_4_conversation_reference TO api_4_conversation_reference_away")
+    try:
+        shown = {}
+        for side, base in (("go", GO), ("rust", RUST)):
+            st, body = jcall(base, "POST", f"/api/v1/agentbots/{canvas}/completions", token=api, body={"query": "how much is parking"})
+            shown[side] = (body.get("code"), body.get("message")) if isinstance(body, dict) else None
+    finally:
+        stack.sql("RENAME TABLE api_4_conversation_reference_away TO api_4_conversation_reference")
+    if shown["go"] and shown["rust"] and shown["go"][0] == shown["rust"][0] and shown["go"][1] != shown["rust"][1] and "api_4_conversation" not in shown["rust"][1]:
+        record("agentbot storage error: Go leaks the cause, ragflow-server answers generically (deliberate)", "KNOWN",
+               f"go: {shown['go'][:160]!r}\n         rust: {shown['rust'][:160]!r}")
+    else:
+        record("agentbot storage error frames", "FAIL", str(shown))
     # A dataset the caller may not use stops the Retrieval node.
     found = stack.rows("SELECT JSON_OBJECT('t', tenant_id) FROM api_token WHERE token='ragflow-e2e-invitee'")
     if found:
@@ -558,7 +569,7 @@ def failures(stack, stub, canvas, api, out):
             st, fr, raw = sse(base, "/api/v1/agents/chat/completions", "Bearer ragflow-e2e-invitee",
                               {"agent_id": canvas, "query": "how much is parking", "stream": True})
             texts[side] = answer_of(fr)
-        ok = all("permission: access denied" in t for t in texts.values())
+        ok = texts["go"] == texts["rust"] and "access denied" in texts["go"]
         record("a dataset the caller may not use stops the Retrieval node on both", "PASS" if ok else "FAIL", str(texts)[:400])
         stack.sql(f"UPDATE knowledgebase SET permission='team' WHERE tenant_id='{owner_tenant}'")
         stack.sql(f"UPDATE user_tenant SET role='invite' WHERE user_id='{member}' AND tenant_id='{owner_tenant}'")
