@@ -128,3 +128,21 @@ fn counts_turns_from_the_canvas_globals() {
     );
     assert_eq!(s.sys["conversation_turns"], 3);
 }
+
+#[test]
+fn display_values_are_go_json() {
+    use ragflow_runtime::template::display_text;
+    // Keys sorted, integral floats without a fraction, HTML left alone.
+    assert_eq!(
+        display_text(&json!({ "b": 1.0, "a": [0.5, true, null], "c": "<&>" })),
+        r#"{"a":[0.5,true,null],"b":1,"c":"<&>"}"#
+    );
+    assert_eq!(display_text(&json!(1e21)), "1e+21");
+    assert_eq!(display_text(&json!(1e-7)), "1e-7");
+    assert_eq!(display_text(&json!(0.000001)), "0.000001");
+    assert_eq!(
+        display_text(&json!(["\u{8}\u{1}\u{2028}"])),
+        "[\"\\b\\u0001\\u2028\"]"
+    );
+    assert_eq!(display_text(&json!("as is")), "as is");
+}
