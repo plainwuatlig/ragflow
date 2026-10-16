@@ -1,5 +1,5 @@
 //! Events one run emits, in upstream's names and `data` shapes, so the
-//! parity oracle can compare them with the Go runtime's stream.
+//! conformance suite can compare them with the goldens recorded from the Go runtime.
 
 use serde_json::{json, Value};
 

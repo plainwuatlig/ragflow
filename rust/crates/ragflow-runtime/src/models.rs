@@ -96,7 +96,7 @@ pub trait Models: Send + Sync {
     /// `chat` on behalf of a named component. A deferred Agent makes its
     /// call while the consuming Message runs, so the caller cannot be
     /// inferred from the event stream; implementations that care (the
-    /// parity oracle keys recordings by it) override this.
+    /// conformance runner keys recordings by it) override this.
     fn chat_for(
         &self,
         component_id: &str,

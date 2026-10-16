@@ -1,4 +1,4 @@
-# Context for rust/docker/retrieval-parity.Dockerfile: only rust/ (the
+# Context for rust/docker/conformance-retrieval.Dockerfile: only rust/ (the
 # upstream tree comes in as the named context `upstream`).
 *
 !rust

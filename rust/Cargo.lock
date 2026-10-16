@@ -1069,7 +1069,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ragflow-parity"
+name = "ragflow-conformance"
 version = "0.0.0"
 dependencies = [
  "chrono",

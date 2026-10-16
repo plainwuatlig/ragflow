@@ -1,17 +1,21 @@
-//! `ragflow-retrieval-parity`: the Rust half of the retrieval parity check
-//! and its comparator.
+//! `ragflow-retrieval-conformance`: the retrieval part of the conformance
+//! suite — the Rust retrieval against goldens recorded from upstream's Go
+//! retrieval (`rust/conformance/oracle-go/retrieval`).
 //!
 //! ```text
-//! ragflow-retrieval-parity embed   --cases F --ollama URL --model M > vectors.json
-//! ragflow-retrieval-parity run     --cases F --vectors V > rust.jsonl
-//! ragflow-retrieval-parity compare --go go.jsonl --rust rust.jsonl
+//! ragflow-retrieval-conformance check   --cases F --vectors V --golden golden.jsonl [--out rust.jsonl]
+//! ragflow-retrieval-conformance run     --cases F --vectors V > rust.jsonl
+//! ragflow-retrieval-conformance compare --golden golden.jsonl --rust rust.jsonl
+//! ragflow-retrieval-conformance embed   --cases F --ollama URL --model M > vectors.json
 //! ```
 //!
 //! A case is one JSON line `{"name": ..., "args": {<Retrieval tool args>}}`.
-//! `run` reads ES_URL, ES_USER, ES_PASSWORD, MYSQL_HOST, MYSQL_PORT,
-//! MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB and RAGFLOW_DICT_PATH from the
-//! environment and prints one line per case in oracle-go's shape:
-//! `{name, envelope, references, requests, error?}`.
+//! `run` and `check` read ES_URL, ES_USER, ES_PASSWORD, MYSQL_HOST,
+//! MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB and RAGFLOW_DICT_PATH
+//! from the environment; each case gives one line in the golden's shape:
+//! `{name, envelope, references, requests, error?}`. `check` needs no Go:
+//! it runs the cases and compares with the golden. `embed` records the
+//! query vectors a contract version is cut with.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -99,6 +103,14 @@ fn cmd_embed(args: &[String]) -> Result<(), String> {
 }
 
 fn cmd_run(args: &[String]) -> Result<(), String> {
+    for line in run_cases(args)? {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// Runs every case through the Rust retrieval; one JSON value per case.
+fn run_cases(args: &[String]) -> Result<Vec<Value>, String> {
     let cases = read_cases(&need(args, "--cases")?)?;
     let vectors: HashMap<String, Vec<f64>> = match arg(args, "--vectors") {
         Some(p) => serde_json::from_str(&std::fs::read_to_string(&p).map_err(|e| e.to_string())?)
@@ -140,6 +152,7 @@ fn cmd_run(args: &[String]) -> Result<(), String> {
         rerankers: None,
         retrieve_by_children: true,
     };
+    let mut out = Vec::new();
     for (name, a) in cases {
         let mut state = RunState::default();
         let res = invoke_tool(&adapter, &a, &mut state);
@@ -159,9 +172,32 @@ fn cmd_run(args: &[String]) -> Result<(), String> {
             "references".into(),
             retrieval_reference(&state).unwrap_or(Value::Null),
         );
-        println!("{}", Value::Object(line));
+        out.push(Value::Object(line));
     }
-    Ok(())
+    Ok(out)
+}
+
+/// `check`: run the cases, then compare with the golden. No Go involved.
+fn cmd_check(args: &[String]) -> Result<bool, String> {
+    let golden = need(args, "--golden")?;
+    let lines = run_cases(args)?;
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    if let Some(out) = arg(args, "--out") {
+        std::fs::write(&out, &text).map_err(|e| format!("{out}: {e}"))?;
+    }
+    let rust: HashMap<String, Value> = lines
+        .iter()
+        .map(|v| {
+            (
+                v.get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                v.clone(),
+            )
+        })
+        .collect();
+    compare(&by_name(&golden)?, &rust)
 }
 
 fn by_name(path: &str) -> Result<Vec<(String, Value)>, String> {
@@ -254,16 +290,24 @@ fn score_diff(go: &Value, rust: &Value) -> f64 {
 }
 
 fn cmd_compare(args: &[String]) -> Result<bool, String> {
-    let go = by_name(&need(args, "--go")?)?;
+    let golden = by_name(&need(args, "--golden")?)?;
     let rust: HashMap<String, Value> = by_name(&need(args, "--rust")?)?.into_iter().collect();
+    compare(&golden, &rust)
+}
+
+/// The golden (upstream's Go retrieval) against the Rust results, per case:
+/// chunk ids and order (exact), scores (1e-9), `formalized_content`
+/// (byte for byte), reference count, error presence; the ES request bodies
+/// are reported but do not fail a case.
+fn compare(go: &[(String, Value)], rust: &HashMap<String, Value>) -> Result<bool, String> {
     let mut pass = 0;
     let mut fail = 0;
     println!(
-        "| case | go n | rust n | ids+order | max score diff | formalized | requests | result |"
+        "| case | golden n | rust n | ids+order | max score diff | formalized | requests | result |"
     );
     println!("|---|---|---|---|---|---|---|---|");
     let mut details = Vec::new();
-    for (name, g) in &go {
+    for (name, g) in go {
         let Some(r) = rust.get(name) else {
             println!("| {name} | - | missing | | | | | FAIL |");
             fail += 1;
@@ -314,7 +358,7 @@ fn cmd_compare(args: &[String]) -> Result<bool, String> {
         );
         if !ok || !req_ok {
             details.push(format!(
-                "## {name}\ngo ids:   {gi:?}\nrust ids: {ri:?}\ngo error: {:?}\nrust error: {:?}",
+                "## {name}\ngolden ids: {gi:?}\nrust ids:   {ri:?}\ngolden error: {:?}\nrust error:   {:?}",
                 g.get("error"),
                 r.get("error")
             ));
@@ -330,14 +374,18 @@ fn cmd_compare(args: &[String]) -> Result<bool, String> {
                             v
                         };
                         details.push(format!(
-                            "request {i} go:   {}\nrequest {i} rust: {}",
+                            "request {i} golden: {}\nrequest {i} rust:   {}",
                             strip(&na),
                             strip(&nb)
                         ));
                     }
                 }
                 if gq.len() != rq.len() {
-                    details.push(format!("request count go={} rust={}", gq.len(), rq.len()));
+                    details.push(format!(
+                        "request count golden={} rust={}",
+                        gq.len(),
+                        rq.len()
+                    ));
                 }
             }
         }
@@ -355,13 +403,14 @@ fn main() -> ExitCode {
         Some("embed") => cmd_embed(&args).map(|_| true),
         Some("run") => cmd_run(&args).map(|_| true),
         Some("compare") => cmd_compare(&args),
-        _ => Err("usage: ragflow-retrieval-parity embed|run|compare ...".into()),
+        Some("check") => cmd_check(&args),
+        _ => Err("usage: ragflow-retrieval-conformance check|run|compare|embed ...".into()),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(e) => {
-            eprintln!("ragflow-retrieval-parity: {e}");
+            eprintln!("ragflow-retrieval-conformance: {e}");
             ExitCode::FAILURE
         }
     }

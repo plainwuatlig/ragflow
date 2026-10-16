@@ -1,5 +1,5 @@
 ---
-why: the fork must rebase onto infiniflow/ragflow without conflicts; only rust/ and one workflow file are added
+why: the fork must sync with infiniflow/ragflow without conflicts; only rust/ and one workflow file are added
 lane: pull
 verify: cd rust && cargo test
 invalidates-when: the runtime moves out of rust/, or the fork starts patching upstream files
@@ -15,13 +15,34 @@ upstream's Go runtime (`internal/agent/`). Components outside
 
     cd rust && cargo test && cargo clippy --all-targets -- -D warnings
 
-## Staying on upstream
+## The contract
+
+The Rust runtime does not track Go's source; it implements a **versioned
+contract**: the canvas DSL and each component's semantics, the SSE event
+protocol, and the slice of RAGFlow's stores it reads and writes. The
+contract's executable form is the conformance suite under
+[`conformance/`](conformance/README.md): checked-in goldens recorded from
+upstream's Go code when a contract version was cut, and a runner that needs
+no Go.
+
+    rust/conformance/run.sh canvas          # Rust runtime vs canvas goldens (cargo only)
+    rust/conformance/run.sh retrieval       # Rust retrieval vs retrieval goldens (Docker)
+    rust/conformance/run.sh server          # ragflow-server vs server goldens (Docker)
+
+## Syncing with upstream and cutting a contract version
 
 Everything this fork adds lives in `rust/` plus `.github/workflows/rust-runtime.yml`;
-no upstream file is edited, so a rebase never conflicts:
+no upstream file is edited, so merging upstream never conflicts:
 
     git fetch upstream
-    git rebase upstream/main
+    git merge upstream/main
+
+Merging upstream does not change what the Rust runtime promises: that is the
+contract version it declares. When upstream's semantics should become the new
+promise, cut a contract version — `rust/conformance/cut.sh <version> <upstream ref>`
+regenerates the goldens from upstream's Go code at that ref (the only step
+that runs Go), then the Rust implementation is brought to the new goldens and
+declares the version. See `conformance/README.md`.
 
 ## ragflow-analyzer — upstream's C++ text analyzer over FFI
 
@@ -41,8 +62,8 @@ workspace member; build it with Docker (linux/amd64):
 (query building, the ES request, the second KNN pass, scoring, pruning, the
 adapter) on top of `ragflow-analyzer`, and implements the runtime's
 `RetrievalService` for the `Retrieval` component. The `live` feature adds
-Elasticsearch/MySQL/Ollama clients. `retrieval-parity/` runs it against
-upstream's Go code on live stores; see its README.
+Elasticsearch/MySQL/Ollama clients and the `ragflow-retrieval-conformance`
+binary that the retrieval part of the conformance suite runs.
 
 ## ragflow-server: RAGFlow's agent endpoints from RAGFlow's own stores
 
@@ -134,4 +155,5 @@ and carries `org.opencontainers.image.revision` and `ragflow.upstream.commit` la
 
 Deploying beside a RAGFlow, splitting traffic and rolling back: [DEPLOY.md](DEPLOY.md).
 
-`server-e2e/` runs the Go server and ragflow-server against one throwaway copy of a deployment and diffs them.
+The server part of the conformance suite (`conformance/server/`) runs ragflow-server against the fixture stores and
+compares what it streams and writes with the goldens recorded from upstream's Go server.

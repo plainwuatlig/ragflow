@@ -1,0 +1,5 @@
+{"data":{"inputs":"hello there"},"event":"workflow_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.4847949,"inputs":{"query":"hello there"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.484837,"elapsed_time":0.00004220008850097656,"error":null,"inputs":{"query":"hello there"},"outputs":{"_created_time":"2026-10-16T07:22:03.484828Z","_elapsed_time":7.08e-7,"query":"hello there"}},"event":"node_finished"}
+{"data":{"component_id":"Switch:Route","component_name":"Switch","component_type":"Switch","created_at":1792135323.484853,"inputs":{"_created_time":"2026-10-16T07:22:03.484828Z","_elapsed_time":7.08e-7,"query":"hello there"},"thoughts":""},"event":"node_started"}
+{"data":{"message":"agent invoke: [NodeRunError] agent: component \"Switch\" invoke: Switch: Switch: condition[4]: clause[0]: operator \">=\" requires numeric operands (left=string, right=string)\n\nnode path: [Switch:Route]"},"event":"error"}

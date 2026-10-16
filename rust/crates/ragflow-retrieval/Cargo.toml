@@ -21,6 +21,6 @@ ureq = { version = "2", default-features = false, features = ["json"], optional 
 mysql = { version = "25", default-features = false, features = ["minimal"], optional = true }
 
 [[bin]]
-name = "ragflow-retrieval-parity"
-path = "src/bin/parity.rs"
+name = "ragflow-retrieval-conformance"
+path = "src/bin/conformance.rs"
 required-features = ["live"]

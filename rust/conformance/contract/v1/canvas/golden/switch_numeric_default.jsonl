@@ -1,0 +1,10 @@
+{"data":{"inputs":"7"},"event":"workflow_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.3764212,"inputs":{"query":"7"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.3764732,"elapsed_time":0.000051975250244140625,"error":null,"inputs":{"query":"7"},"outputs":{"_created_time":"2026-10-16T07:22:03.376459Z","_elapsed_time":8.33e-7,"query":"7"}},"event":"node_finished"}
+{"data":{"component_id":"Switch:Route","component_name":"Switch","component_type":"Switch","created_at":1792135323.3765,"inputs":{"_created_time":"2026-10-16T07:22:03.376459Z","_elapsed_time":8.33e-7,"query":"7"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"Switch:Route","component_name":"Switch","component_type":"Switch","created_at":1792135323.376696,"elapsed_time":0.00019621849060058594,"error":null,"inputs":{"_created_time":"2026-10-16T07:22:03.376459Z","_elapsed_time":8.33e-7,"query":"7"},"outputs":{"_created_time":"2026-10-16T07:22:03.376527Z","_elapsed_time":0.000018833,"_next":["Message:Default"]}},"event":"node_finished"}
+{"data":{"component_id":"Message:Default","component_name":"Message","component_type":"Message","created_at":1792135323.376729,"inputs":{"_created_time":"2026-10-16T07:22:03.376527Z","_elapsed_time":0.000018833,"_next":["Message:Default"]},"thoughts":""},"event":"node_started"}
+{"data":{"content":"default: 7"},"event":"message"}
+{"data":{"component_id":"Message:Default","component_name":"Message","component_type":"Message","created_at":1792135323.37679,"elapsed_time":0.00006103515625,"error":null,"inputs":{"_created_time":"2026-10-16T07:22:03.376527Z","_elapsed_time":0.000018833,"_next":["Message:Default"]},"outputs":{"_created_time":"2026-10-16T07:22:03.376744Z","_elapsed_time":0.000040417,"content":"default: 7","downloads":[]}},"event":"node_finished"}
+{"data":{"reference":null},"event":"message_end"}
+{"data":{"created_at":1792135323.376809,"elapsed_time":0.0007827281951904297,"inputs":{"query":"7"},"outputs":"default: 7"},"event":"workflow_finished"}

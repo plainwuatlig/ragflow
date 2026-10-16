@@ -1,11 +1,11 @@
 // Command oracle-go runs upstream's agent Retrieval tool (internal/agent/tool
 // RetrievalTool → NLPRetrievalAdapter → nlp.RetrievalService → the ES engine)
 // against a live Elasticsearch and MySQL, one case per stdin line, and writes
-// one JSON line per case to -out. It is the Go half of the retrieval parity check.
+// one JSON line per case to -out. It records the retrieval goldens when a contract version is cut.
 //
 // Build it inside the upstream tree it should exercise (it is `package main`
 // in the ragflow module, so it may import internal/); see
-// rust/docker/retrieval-parity.Dockerfile.
+// rust/docker/conformance-retrieval.Dockerfile.
 //
 // Read-only by construction: the engine talks to Elasticsearch through an
 // in-process proxy that forwards only `GET /` and `POST .../_search`, answers

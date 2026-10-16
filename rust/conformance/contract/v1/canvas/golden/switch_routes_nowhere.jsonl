@@ -1,0 +1,6 @@
+{"data":{"inputs":"hi"},"event":"workflow_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.64752,"inputs":{"query":"hi"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.647556,"elapsed_time":0.00003600120544433594,"error":null,"inputs":{"query":"hi"},"outputs":{"_created_time":"2026-10-16T07:22:03.647548Z","_elapsed_time":6.67e-7,"query":"hi"}},"event":"node_finished"}
+{"data":{"component_id":"Switch:S","component_name":"Switch","component_type":"Switch","created_at":1792135323.647572,"inputs":{"_created_time":"2026-10-16T07:22:03.647548Z","_elapsed_time":6.67e-7,"query":"hi"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"Switch:S","component_name":"Switch","component_type":"Switch","created_at":1792135323.647595,"elapsed_time":0.00002288818359375,"error":null,"inputs":{"_created_time":"2026-10-16T07:22:03.647548Z","_elapsed_time":6.67e-7,"query":"hi"},"outputs":{"_created_time":"2026-10-16T07:22:03.647585Z","_elapsed_time":0.000005625,"_next":["matched_0"]}},"event":"node_finished"}
+{"data":{"message":"agent invoke: Switch routing stopped because no connected branch matched the condition; check the Switch branches"},"event":"error"}

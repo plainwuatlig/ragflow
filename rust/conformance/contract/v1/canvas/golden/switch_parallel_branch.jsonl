@@ -1,0 +1,10 @@
+{"data":{"inputs":"hi"},"event":"workflow_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.592407,"inputs":{"query":"hi"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"begin","component_name":"Begin","component_type":"Begin","created_at":1792135323.592442,"elapsed_time":0.00003504753112792969,"error":null,"inputs":{"query":"hi"},"outputs":{"_created_time":"2026-10-16T07:22:03.592433Z","_elapsed_time":9.58e-7,"query":"hi"}},"event":"node_finished"}
+{"data":{"component_id":"Message:Other","component_name":"Message","component_type":"Message","created_at":1792135323.592454,"inputs":{"_created_time":"2026-10-16T07:22:03.592433Z","_elapsed_time":9.58e-7,"query":"hi"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"Switch:S","component_name":"Switch","component_type":"Switch","created_at":1792135323.5924659,"inputs":{"_created_time":"2026-10-16T07:22:03.592433Z","_elapsed_time":9.58e-7,"query":"hi"},"thoughts":""},"event":"node_started"}
+{"data":{"component_id":"Switch:S","component_name":"Switch","component_type":"Switch","created_at":1792135323.592562,"elapsed_time":0.00009608268737792969,"error":null,"inputs":{"_created_time":"2026-10-16T07:22:03.592433Z","_elapsed_time":9.58e-7,"query":"hi"},"outputs":{"_created_time":"2026-10-16T07:22:03.592504Z","_elapsed_time":0.000051541,"_next":["matched_0"]}},"event":"node_finished"}
+{"data":{"content":"other"},"event":"message"}
+{"data":{"component_id":"Message:Other","component_name":"Message","component_type":"Message","created_at":1792135323.5925992,"elapsed_time":0.00014519691467285156,"error":null,"inputs":{"_created_time":"2026-10-16T07:22:03.592433Z","_elapsed_time":9.58e-7,"query":"hi"},"outputs":{"_created_time":"2026-10-16T07:22:03.592505Z","_elapsed_time":0.000085042,"content":"other","downloads":[]}},"event":"node_finished"}
+{"data":{"reference":null},"event":"message_end"}
+{"data":{"created_at":1792135323.5926201,"elapsed_time":0.0006783008575439453,"inputs":{"query":"hi"},"outputs":"other"},"event":"workflow_finished"}
