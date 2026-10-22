@@ -214,12 +214,14 @@ impl Registry {
         self
     }
 
-    /// The components that need nothing from outside the runtime.
+    /// The components that need nothing from outside the runtime (CodeExec
+    /// runs its Lua in-process).
     pub fn with_core() -> Self {
         let mut r = Registry::default();
         r.register("Begin", crate::components::begin::factory)
             .register("Message", crate::components::message::factory)
-            .register("Switch", crate::components::switch::factory);
+            .register("Switch", crate::components::switch::factory)
+            .register("CodeExec", crate::components::code_exec::factory);
         r
     }
 
