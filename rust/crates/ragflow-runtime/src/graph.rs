@@ -23,6 +23,7 @@ pub const SUPPORTED: &[&str] = &[
     "Switch",
     "Agent",
     "Message",
+    "CodeExec",
 ];
 
 #[derive(Debug, thiserror::Error, PartialEq)]

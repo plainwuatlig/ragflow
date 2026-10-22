@@ -12,6 +12,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 regex.workspace = true
 chrono.workspace = true
+mlua.workspace = true
 
 [dev-dependencies]
 chrono.workspace = true

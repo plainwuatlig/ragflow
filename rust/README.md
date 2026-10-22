@@ -72,8 +72,9 @@ Not served in v1:
 * `files` in a request (refused with a clear error: file inputs need RAGFlow's document parsers).
 * The OpenAI-compatible agent endpoint (`openai-compatible` requests are refused). It comes later, together with chat
   assistants and search.
-* Canvases with components the runtime lacks (anything but Begin, Categorize, Retrieval, Switch, Agent, Message;
-  dataflow canvases included): refused before anything is written.
+* Canvases with components the runtime lacks (anything but Begin, Categorize, Retrieval, Switch, Agent, Message,
+  CodeExec; dataflow canvases included): refused before anything is written.
+* CodeExec in any language but Lua: refused before anything is written (below).
 * Chat providers other than OpenAI-compatible endpoints and Ollama: a run that needs another provider fails naming it.
   More providers come in a later ticket. Hosted-provider addresses must be publicly routable, as upstream requires.
 * Uploads and attachments, the admin heartbeat and licence gate, and the `agent:run:*` records that only UserFillUp
@@ -87,6 +88,7 @@ Not served in v1:
 | storage failure on the agentbot endpoints | the error text carries the storage cause (table, SQL error) | `Internal storage error while accessing the agent.` | the cause is internal detail |
 | a deferred Agent's `node_finished` outputs and its Message's inputs | the unopened stream (`{"content": {"Open": null}}`) | the real answer | upstream's value is an artefact |
 | `files`, OpenAI-compatible mode | served | refused | v1 scope, above |
+| CodeExec languages | `python`, `nodejs`, run by a sandbox provider (a privileged executor with the Docker socket, or a cloud service) | `lua` only, run in-process on Luau: no `require`, `io`, `os` or network, read-only libraries, 32 MiB and 5 s (the node's `timeout`, at most 30 s) per run; `main(args)` gets the `arguments` as a table | exact logic (fees, schedules) without a privileged sidecar; proposed upstream as an in-process language |
 
 Run failures are worded as upstream words them (`agent invoke: [NodeRunError] agent: component "<name>" invoke: ...`,
 `**ERROR**: [GraphRunError] ...`), in the stream and in the stored message and `errors` rows. Transport failures

@@ -1194,7 +1194,7 @@ mod tests {
     fn a_canvas_with_components_this_server_lacks_is_refused_up_front() {
         let w = world();
         let mut unsupported = dsl();
-        unsupported["components"]["Code:x"] = json!({"obj": {"component_name": "CodeExec", "params": {}}, "upstream": ["begin"], "downstream": []});
+        unsupported["components"]["Invoke:x"] = json!({"obj": {"component_name": "Invoke", "params": {}}, "upstream": ["begin"], "downstream": []});
         let w = Arc::new(World {
             base: {
                 let mut b = w.base.clone();
@@ -1206,7 +1206,7 @@ mod tests {
         let a = agent(&w, Arc::new(FakeKv::default()));
         let err = a.start(params("alice", None, false, "hi")).err().unwrap();
         assert!(
-            matches!(&err, AgentError::Message(m) if m.contains("CodeExec")),
+            matches!(&err, AgentError::Message(m) if m.contains("Invoke")),
             "{err:?}"
         );
         assert!(w.sessions.lock().unwrap().is_empty(), "nothing was written");
